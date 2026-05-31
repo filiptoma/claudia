@@ -9,7 +9,7 @@ import type { Extension } from '@codemirror/state'
 import { materialDark, materialLight } from '@uiw/codemirror-theme-material'
 import { useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, AlertCircle } from 'lucide-react'
-import { SUPABASE_ANON_KEY, SUPABASE_URL, getAccessToken, supabase } from '../lib/supabase'
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getAccessToken, supabase } from '../lib/supabase'
 import { uploadImage } from '../lib/storage'
 import { isInTable } from '../lib/mdTable'
 import { treeKeys, useSignedImages } from '../hooks/useTree'
@@ -159,8 +159,8 @@ export default function Editor({
         keepalive: true,
         headers: {
           'Content-Type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${getAccessToken() ?? SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${getAccessToken() ?? SUPABASE_PUBLISHABLE_KEY}`,
           Prefer: 'return=minimal',
         },
         body: JSON.stringify({ content: latest.current }),

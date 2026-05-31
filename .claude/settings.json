@@ -50,7 +50,12 @@
       "Bash(git -c user.name=filiptoma -c user.email=itsfiliptoma@gmail.com commit -q -m ' *)",
       "Bash(git push *)",
       "Bash(git -c user.name=filiptoma -c user.email=itsfiliptoma@gmail.com commit -q -m 'docs: note both SQL migrations in setup *)",
-      "Bash(git -c user.name=filiptoma -c user.email=itsfiliptoma@gmail.com commit -q -m 'docs: clarify new Supabase publishable/secret API keys *)"
+      "Bash(git -c user.name=filiptoma -c user.email=itsfiliptoma@gmail.com commit -q -m 'docs: clarify new Supabase publishable/secret API keys *)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' 'https://segwonmchgaivksqhqze.supabase.co/rest/v1/__TRACKED_VAR__?select=*&limit=1' -H 'apikey: sb_publishable_RlGy2IqbSxWKQMi3-gZ6zw_MwbIcetC')",
+      "Bash(curl -s -o /dev/null -w '  bogus -> HTTP %{http_code}\\\\n' https://segwonmchgaivksqhqze.supabase.co/rest/v1/bogus?select=id -H 'apikey: sb_publishable_RlGy2IqbSxWKQMi3-gZ6zw_MwbIcetC')",
+      "Bash(curl -s https://segwonmchgaivksqhqze.supabase.co/auth/v1/settings -H 'apikey: sb_publishable_RlGy2IqbSxWKQMi3-gZ6zw_MwbIcetC')",
+      "Bash(python3 -c 'import sys,json *)",
+      "Bash(git -c user.name=filiptoma -c user.email=itsfiliptoma@gmail.com commit -q -m 'use VITE_SUPABASE_PUBLISHABLE_KEY \\(new Supabase key naming\\) *)"
     ],
     "additionalDirectories": [
       "/tmp"
