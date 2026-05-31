@@ -1,0 +1,50 @@
+# Supabase setup (hosted)
+
+One-time setup of the backend. ~10 minutes. You only need a free Supabase account.
+
+## 1. Create the project
+- supabase.com → **New project** (free tier). Pick a region near you, set a DB password.
+- Wait for it to provision.
+
+## 2. Apply the schema + security rules
+- In the dashboard: **SQL Editor → New query**.
+- Paste the entire contents of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) and **Run**.
+- This creates the tables, the Row Level Security policies (the whole access model), the signup
+  trigger, the role-protection trigger, and the private `media` storage bucket + its policies.
+
+## 3. Configure auth
+- **Authentication → Providers**:
+  - **Email**: enabled by default. (For local testing you may turn **off** "Confirm email" so sign-ups
+    log in immediately.)
+  - **Google** and **GitHub**: enable each, paste the client id/secret from the provider's OAuth app.
+- **Authentication → URL Configuration**:
+  - **Site URL**: `http://127.0.0.1:5173`
+  - **Redirect URLs**: add `http://127.0.0.1:5173/**`
+  - In each OAuth provider (Google/GitHub), set the callback URL to the value Supabase shows
+    (`https://<your-ref>.supabase.co/auth/v1/callback`).
+
+## 4. Get your API keys
+- **Project Settings → API**:
+  - **Project URL** → `VITE_SUPABASE_URL`
+  - **anon public** key → `VITE_SUPABASE_ANON_KEY` (safe to ship to the browser — RLS protects the data)
+- Put them in `frontend/.env`:
+  ```
+  VITE_SUPABASE_URL=https://<your-ref>.supabase.co
+  VITE_SUPABASE_ANON_KEY=<anon-key>
+  ```
+
+## 5. Make yourself admin
+- Sign up in the app once (email/password). Then in **SQL Editor**:
+  ```sql
+  update public.profiles set role = 'admin' where email = 'you@example.com';
+  ```
+- Sign out and back in so your session reflects the new role.
+
+## Roles
+- **basic** (default) — sees public projects + projects shared with them; can create & own their own.
+- **mod** — can view/edit all content (no user management).
+- **admin** — everything, plus the Users dashboard and role changes.
+
+> Security note: everything is enforced by Postgres RLS, so the rules hold even if the frontend is
+> bypassed. Private/shared project images live in a **private** bucket and are served via short-lived
+> signed URLs — unauthorized users cannot fetch them by URL.
