@@ -26,13 +26,16 @@ One-time setup of the backend. ~10 minutes. You only need a free Supabase accoun
     (`https://<your-ref>.supabase.co/auth/v1/callback`).
 
 ## 4. Get your API keys
-- **Project Settings → API**:
-  - **Project URL** → `VITE_SUPABASE_URL`
-  - **anon public** key → `VITE_SUPABASE_ANON_KEY` (safe to ship to the browser — RLS protects the data)
+Supabase's newer projects use **Publishable / Secret** keys (the old `anon`/`service_role` naming).
+- **Project URL** → `VITE_SUPABASE_URL`. Find it via the green **Connect** button at the top of the
+  dashboard, or **Project Settings → Data API**. It's `https://<your-ref>.supabase.co`.
+- **Publishable key** (`sb_publishable_…`, under **Project Settings → API Keys**) →
+  `VITE_SUPABASE_ANON_KEY`. This is the browser-safe key (RLS protects the data).
+  **Do NOT** use the **Secret key** (`sb_secret_…`) — it bypasses RLS and is server-only.
 - Put them in `frontend/.env`:
   ```
   VITE_SUPABASE_URL=https://<your-ref>.supabase.co
-  VITE_SUPABASE_ANON_KEY=<anon-key>
+  VITE_SUPABASE_ANON_KEY=sb_publishable_xxxxxxxx
   ```
 
 ## 5. Make yourself admin
