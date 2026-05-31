@@ -1,149 +1,71 @@
 # Claudia
 
-A single-workspace, multi-course **markdown knowledge site** — inspired by HackMD, but much
-simpler. Anonymous visitors get a clean, read-only site: a left sidebar that nests
-**Project → Folder → Document**, with the selected document rendered as markdown. **Editors** and
-**admins** sign in to get a HackMD-style **View / Split / Edit** control on each document — a
-CodeMirror markdown source editor with a live preview — and can create/rename/delete content and
-upload images. **Admins** also get a read-only **Users** dashboard.
+A single-workspace, multi-course **markdown knowledge site** — inspired by HackMD, but simpler, with
+**secure-by-default access control**. Visitors read public projects; signed-in users see what's been
+shared with them and can create & own their own. **Editors** get a HackMD-style **View / Split /
+Edit** control per document (CodeMirror source + live preview), can manage content, and upload
+images. **Admins** also get a read-only **Users** dashboard.
 
-- **Frontend:** Vite + React 18/19 + TypeScript, react-router v6, react-markdown (+ remark-gfm,
-  rehype-slug), CodeMirror 6 (`@uiw/react-codemirror`), Inter + JetBrains Mono, `lucide-react` icons.
-- **Backend:** [PocketBase](https://pocketbase.io) v0.39 (auth + SQLite + file storage + admin UI).
-- **Image storage:** PocketBase file fields, backed by **Cloudflare R2** (S3-compatible) in
-  production; local disk in dev (no code difference).
-- **Hosting (free):** **Cloudflare Pages** for the frontend, a hosted PocketBase
-  (PocketHost / Fly.io) for the backend, Cloudflare R2 for media.
+- **Frontend:** Vite + React + TypeScript, react-router v6, TanStack Query, react-markdown
+  (+ remark-gfm, rehype-slug, rehype-highlight), CodeMirror 6 (`@uiw/react-codemirror`, Material
+  theme), Inter + JetBrains Mono, `lucide-react`.
+- **Backend:** [Supabase](https://supabase.com) — Postgres + **Row Level Security**, Auth
+  (email/password + Google + GitHub), and **private** Storage for images.
+- **Hosting (free):** Cloudflare Pages (frontend) + hosted Supabase (backend).
 
-There is exactly **one shared workspace**, visible to everyone. Three roles: `viewer` (default /
-anonymous, read-only), `editor` (CRUD + uploads), `admin` (+ Users dashboard).
+## Access model (enforced in the database via RLS)
 
-> ⚠️ All content and uploaded media are **world-readable** by design (public content site). Media
-> file URLs are public and require no token — don't upload anything sensitive.
+**Roles** (`profiles.role`): `basic` / `mod` / `admin`.
+- **basic** — sees public projects + projects shared with them; can create & own their own.
+- **mod** — can view/edit all content (no user management).
+- **admin** — everything, plus the Users dashboard and role changes.
+
+**Per project:** an `owner`, an `is_public` flag, and a `project_members` list of
+(user, role∈{viewer, editor}). Folders/documents/media **inherit** the project's access.
+- **view** = public **or** staff (mod/admin) **or** owner **or** a member.
+- **edit content** = staff **or** owner **or** member with role `editor`.
+- **manage** (rename/delete, change sharing) = staff **or** owner.
+- Private / Shared / Public is **derived** (public flag + whether anyone's invited), not a stored
+  type — so the label can never drift out of sync with the access list.
+
+Everything is enforced by Postgres RLS, so the rules hold even if the frontend is bypassed.
+Images live in a **private** Storage bucket and are served via short-lived **signed URLs** — an image
+in a project you can't access is genuinely unreachable.
 
 ## Repo layout
 
 ```
 claudia/
-  frontend/        # Vite + React + TypeScript app
-  pocketbase/      # PocketBase binary + pb_migrations/ (schema) + README
-  scripts/         # optional markdown-folder importer
+  frontend/                 # Vite + React + TypeScript app
+  supabase/migrations/      # 0001_init.sql (schema + RLS + storage) · 0002_sharing_rpcs.sql
+  scripts/                  # (legacy) markdown importer — to be ported to Supabase
+  SUPABASE-SETUP.md         # one-time hosted-backend setup
+  RUN.md                    # run & build
 ```
 
-## Local development
+## Quick start
 
-### 1. PocketBase (backend)
+1. **Backend:** follow [SUPABASE-SETUP.md](SUPABASE-SETUP.md) — create a project, run the two SQL
+   files, configure auth, grab your API keys.
+2. **Frontend:**
+   ```bash
+   cd frontend
+   cp .env.example .env      # fill VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+   npm install
+   npm run dev               # http://127.0.0.1:5173
+   ```
+3. **Make yourself admin:** sign up, then in Supabase SQL editor:
+   `update public.profiles set role = 'admin' where email = 'you@example.com';` — and sign in again.
 
-```bash
-cd pocketbase
-# The pocketbase v0.39 binary should already be here; otherwise download it for your OS
-# from https://pocketbase.io/docs (or GitHub releases) and unzip it into this folder.
-./pocketbase serve            # applies pb_migrations/ automatically, prints the admin URL
-```
+See [RUN.md](RUN.md) for build/deploy details.
 
-On first run, open the printed admin URL and **create the superuser** (this is the PocketBase
-dashboard account — it is NOT an app user). Then in the dashboard:
+## Deployment (free)
 
-- **Collections → users → Options:** enable **Email/password**, and add **Google** and **GitHub**
-  OAuth2 (each provider's client id/secret). See [`pocketbase/README.md`](pocketbase/README.md) for
-  the exact OAuth callback URLs.
+- **Backend:** the hosted Supabase project (apply the migrations, enable auth providers, set
+  redirect URLs).
+- **Frontend:** `npm run build` → deploy `frontend/dist/` to **Cloudflare Pages** (root `frontend`,
+  output `dist`), set the two `VITE_SUPABASE_*` env vars, and add your Pages origin to Supabase →
+  Authentication → URL Configuration. SPA fallback: [`frontend/public/_redirects`](frontend/public/_redirects).
 
-### 2. Frontend
-
-```bash
-cd frontend
-cp .env.example .env          # VITE_PB_URL=http://127.0.0.1:8090
-npm install
-npm run dev                   # http://127.0.0.1:5173
-```
-
-> **Host spelling:** use `127.0.0.1` everywhere (Vite, `VITE_PB_URL`, and OAuth redirect URLs).
-> Don't mix it with `localhost`, or OAuth/CORS/cookies can silently break.
-
-### 3. Become an admin (two distinct identities)
-
-PocketBase has **two** kinds of accounts — don't conflate them:
-
-1. **`_superusers`** — the dashboard login you created on first `serve`. Not an app user; never
-   appears in the in-app Users dashboard.
-2. **app `users`** — accounts created through the app (email/password or OAuth).
-
-To make yourself an app admin:
-
-1. Register a normal account **in the app** (Sign in → Register).
-2. In the PocketBase dashboard: **Collections → users → your record → set `role = admin`**.
-3. **Sign out and sign in again** in the app so your new token carries `role=admin`.
-
-Then you'll see the **View / Split / Edit** control on documents, the create/rename/delete
-affordances in the sidebar, and `/admin/users`.
-
-## Production deployment (all free)
-
-### Backend — PocketBase
-
-Pick one:
-
-- **PocketHost** (recommended, managed): create an instance, upload `pb_migrations/`, create the
-  superuser, enable the auth providers, and point storage at R2 (below). You get a
-  `https://<name>.pockethost.io` URL.
-- **Fly.io** (self-managed): deploy the binary in a tiny machine with a **persistent volume** mounted
-  at the PocketBase data dir (SQLite must persist).
-
-### Images — Cloudflare R2
-
-In **PocketBase Admin → Settings → Files storage**, switch to **S3** and fill in R2 values:
-
-| Setting | Value |
-|---|---|
-| Endpoint | `https://<accountid>.r2.cloudflarestorage.com` |
-| Bucket | e.g. `claudia-media` |
-| Region | `auto` |
-| Access key / secret | from an R2 **API token** (S3 credentials) |
-| Force path style | **off** (R2/AWS need it off; only MinIO needs it on) |
-
-Local dev uses local disk — no code change, because file URLs stay `${PB_URL}/api/files/...` and
-PocketBase serves/proxies them. R2 free tier: 10 GB + zero egress.
-
-### OAuth
-
-In the PocketBase Admin UI, add Google + GitHub apps and set each provider's redirect URL to
-`${PB_URL}/api/oauth2-redirect`. Add your deployed frontend origin where the provider requires it.
-(GitHub OAuth apps allow only one callback URL, so use separate dev/prod apps.)
-
-### Frontend — Cloudflare Pages
-
-```bash
-cd frontend
-npm run build                 # outputs dist/
-```
-
-Deploy on **Cloudflare Pages**:
-
-- **Build command:** `npm run build` · **Build output directory:** `dist` · **Root directory:**
-  `frontend`
-- **Environment variable:** `VITE_PB_URL` = your deployed PocketBase URL.
-- **SPA fallback:** handled by [`frontend/public/_redirects`](frontend/public/_redirects)
-  (`/*  /index.html  200`) — Cloudflare Pages (and Netlify) honor it, so deep-link reloads work.
-
-The app uses `BrowserRouter` with Vite `base: '/'` (clean URLs like `/algorithms/overview`).
-
-## Optional: bulk import markdown
-
-Seed a project from a folder of `.md` files (with local images rewritten to PocketBase URLs):
-
-```bash
-cd scripts
-npm install
-PB_URL=http://127.0.0.1:8090 PB_ADMIN_EMAIL=you@example.com PB_ADMIN_PW=... \
-  npm run import -- --project "My Course" --dir /path/to/markdown
-```
-
-See [`scripts/import-folder.ts`](scripts/import-folder.ts).
-
-## Acceptance checklist
-
-See the in-repo verification steps; the short version: migration applies cleanly (5 collections),
-anonymous read works with no edit UI, all three sign-in methods work, a promoted editor gets
-View/Split/Edit with autosaving live preview, image upload works, CRUD + cascade-delete confirms
-work, admins see `/admin/users`, and markdown (tables / fenced code / blockquotes / rose inline
-`code` / images on a white plate) renders cleanly in light and dark mode.
+> The `pocketbase/` folder is the previous backend implementation, kept for reference during the
+> migration; it can be removed once the Supabase deployment is verified.

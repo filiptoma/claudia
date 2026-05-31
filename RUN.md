@@ -1,65 +1,48 @@
 # Run & Build Claudia
 
-Two parts run side by side: **PocketBase** (backend, port 8090) and the **frontend** (Vite, port 5173).
-Use two terminals. Requires Node ≥ 20.19.
+Backend is **hosted Supabase** (no local server). You just run the frontend.
+Requires Node ≥ 20.19.
 
----
+## 0. One-time backend setup
+Follow [SUPABASE-SETUP.md](SUPABASE-SETUP.md): create a Supabase project, run the two SQL files in
+`supabase/migrations/` (SQL Editor), set the Site/Redirect URLs, and grab your API keys.
 
-## 1. Backend — PocketBase (Terminal 1)
-
-```bash
-cd pocketbase
-./pocketbase serve
-```
-
-- Applies the schema migration automatically and prints the admin URL (http://127.0.0.1:8090/_/).
-- **First run only:** open that URL and create the superuser (the dashboard login).
-
-Leave this running.
-
----
-
-## 2. Frontend (Terminal 2)
-
+## 1. Configure the frontend
 ```bash
 cd frontend
-cp .env.example .env        # first time only — sets VITE_PB_URL=http://127.0.0.1:8090
-npm install                 # first time only
-npm run dev                 # http://127.0.0.1:5173
+cp .env.example .env
+```
+Edit `frontend/.env` with your project's values (Supabase → Project Settings → API):
+```
+VITE_SUPABASE_URL=https://<your-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon public key>
 ```
 
-Open http://127.0.0.1:5173.
+## 2. Run
+```bash
+cd frontend
+npm install      # first time only
+npm run dev      # http://127.0.0.1:5173
+```
 
----
+## 3. Become an admin
+1. Sign up in the app (email/password).
+2. In Supabase → SQL Editor: `update public.profiles set role = 'admin' where email = 'you@example.com';`
+3. Sign out and back in.
 
-## 3. Become an editor/admin (to see View/Split/Edit + create content)
-
-1. In the app: **Sign in → Register** a normal account.
-2. In the PocketBase dashboard (http://127.0.0.1:8090/_/): **Collections → users → your record →
-   set `role = admin`** (or `editor`).
-3. Back in the app: **Sign out and sign in again** (the new role is in the token).
-
-> Use `127.0.0.1` everywhere (not `localhost`) so auth/cookies stay consistent.
-
----
+Roles: **basic** (default — public + shared-with-them; can create & own their own projects),
+**mod** (view/edit all content), **admin** (everything + the Users dashboard).
 
 ## Production build
-
 ```bash
 cd frontend
-npm run build               # type-checks + bundles into frontend/dist/
-npm run preview             # optional: serve the built dist/ locally to test it
+npm run build    # type-checks + bundles into frontend/dist/
+npm run preview  # optional: serve the built dist/ locally
 ```
-
-Deploy `frontend/dist/` to **Cloudflare Pages** (build command `npm run build`, output dir `dist`,
-set env `VITE_PB_URL` to your deployed PocketBase URL). SPA fallback is handled by
+Deploy `frontend/dist/` to **Cloudflare Pages** (build cmd `npm run build`, output `dist`, root
+`frontend`), set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` env vars, and add your Pages URL to
+Supabase → Authentication → URL Configuration → Redirect URLs. SPA fallback is handled by
 `frontend/public/_redirects`.
 
----
-
 ## Stop
-
-`Ctrl+C` in each terminal.
-
-(Full details — OAuth setup, Cloudflare R2 storage, the optional markdown importer — are in
-[README.md](README.md).)
+`Ctrl+C` in the terminal.
