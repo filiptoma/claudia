@@ -134,11 +134,14 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- only admins may change a role (blocks self-escalation even if RLS/UI is bypassed)
+-- Only admins may change a role (blocks self-escalation even if the UI is bypassed). The
+-- `auth.uid() is not null` guard skips the check for direct SQL / the service role (no end-user
+-- context) — needed to bootstrap the first admin from the SQL editor. The API path is still safe
+-- because RLS blocks anonymous profile updates entirely.
 create or replace function public.protect_profile_role()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if new.role is distinct from old.role and not public.is_admin() then
+  if new.role is distinct from old.role and auth.uid() is not null and not public.is_admin() then
     raise exception 'Only admins can change roles';
   end if;
   return new;
