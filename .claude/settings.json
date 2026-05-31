@@ -48,7 +48,8 @@
       "Bash(git rm *)",
       "Bash(grep -iE 'settings.local|node_modules|/dist/|\\\\.env$|pocketbase/pocketbase$|pb_data')",
       "Bash(git -c user.name=filiptoma -c user.email=itsfiliptoma@gmail.com commit -q -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git -c user.name=filiptoma -c user.email=itsfiliptoma@gmail.com commit -q -m 'docs: note both SQL migrations in setup *)"
     ],
     "additionalDirectories": [
       "/tmp"

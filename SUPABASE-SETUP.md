@@ -7,10 +7,12 @@ One-time setup of the backend. ~10 minutes. You only need a free Supabase accoun
 - Wait for it to provision.
 
 ## 2. Apply the schema + security rules
-- In the dashboard: **SQL Editor → New query**.
-- Paste the entire contents of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) and **Run**.
-- This creates the tables, the Row Level Security policies (the whole access model), the signup
-  trigger, the role-protection trigger, and the private `media` storage bucket + its policies.
+- In the dashboard: **SQL Editor → New query**. Run these two files **in order** (paste each, Run):
+  1. [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) — tables, RLS policies
+     (the whole access model), the signup + role-protection triggers, and the private `media`
+     bucket + its policies.
+  2. [`supabase/migrations/0002_sharing_rpcs.sql`](supabase/migrations/0002_sharing_rpcs.sql) — the
+     invite-by-email helper functions (lets owners share without exposing the users table).
 
 ## 3. Configure auth
 - **Authentication → Providers**:
