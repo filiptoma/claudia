@@ -1,48 +1,57 @@
-import type { RecordModel } from 'pocketbase'
+export type Role = 'basic' | 'mod' | 'admin'
+export type MemberRole = 'viewer' | 'editor'
+export type Visibility = 'private' | 'shared' | 'public'
 
-export type Role = 'viewer' | 'editor' | 'admin'
-
-// A user's stored role may be empty ('') for fresh sign-ups; treat empty as 'viewer'.
-export interface UserRec extends RecordModel {
-  email: string
-  name: string
-  role: Role | ''
-  verified: boolean
+export interface Profile {
+  id: string
+  email: string | null
+  name: string | null
+  role: Role
+  created_at: string
 }
 
-export type Visibility = 'private' | 'public' | 'shared'
-
-export interface Project extends RecordModel {
-  name: string
-  slug: string
-  order: number
-  visibility: Visibility | '' // '' (unset) is treated as private
-  sharedUsers: string[]
-}
-
-export interface Folder extends RecordModel {
+export interface Project {
+  id: string
   name: string
   slug: string
-  project: string
-  order: number
+  owner: string | null
+  is_public: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
-export interface DocumentRec extends RecordModel {
+export interface ProjectMember {
+  project_id: string
+  user_id: string
+  role: MemberRole
+  created_at: string
+}
+
+export interface Folder {
+  id: string
+  name: string
+  slug: string
+  project_id: string
+  sort_order: number
+}
+
+export interface DocumentRec {
+  id: string
   title: string
   slug: string
-  project: string
-  folder: string // '' when at project root
+  project_id: string
+  folder_id: string | null
   content: string
-  order: number
-  created: string
-  updated: string
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
-export interface MediaRec extends RecordModel {
-  file: string
-  document: string
-  alt: string
+// A project member resolved with the member's profile info (from the list_project_members RPC).
+export interface MemberInfo {
+  user_id: string
+  name: string | null
+  email: string | null
+  role: MemberRole
 }
-
-export const effectiveRole = (user: UserRec | null): Role =>
-  user && (user.role === 'editor' || user.role === 'admin') ? user.role : 'viewer'

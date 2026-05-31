@@ -1,31 +1,32 @@
-import { pb } from './pb'
+import { supabase } from './supabase'
 import { nextOrder } from './order'
-import { uniqueSlug } from './slug'
-import type { DocumentRec, Folder, Project, Visibility } from './types'
+import { slugify } from './slug'
+import type { DocumentRec, Folder, MemberInfo, MemberRole, Project } from './types'
 
-export async function createProject(name: string): Promise<Project> {
-  const slug = await uniqueSlug('projects', name)
-  const order = await nextOrder('projects')
-  // New projects are private by default — only admins can see them until shared/published.
-  return pb.collection('projects').create<Project>({ name, slug, order, visibility: 'private', sharedUsers: [] })
+type Table = 'projects' | 'folders' | 'documents'
+
+// Insert, retrying with -2/-3/… on a unique-slug conflict. Needed because RLS can hide a
+// colliding project slug from the client, so we can't reliably pre-check uniqueness.
+async function insertUniqueSlug<T>(table: Table, fields: Record<string, unknown>, slugBase: string): Promise<T> {
+  const root = slugify(slugBase)
+  for (let i = 0; ; i++) {
+    const slug = i === 0 ? root : `${root}-${i + 1}`
+    const { data, error } = await supabase.from(table).insert({ ...fields, slug }).select().single()
+    if (!error) return data as T
+    if (error.code === '23505') continue // unique_violation -> bump slug
+    throw new Error(error.message)
+  }
 }
 
-export async function setProjectAccess(
-  id: string,
-  visibility: Visibility,
-  sharedUsers: string[],
-): Promise<void> {
-  await pb.collection('projects').update(id, {
-    visibility,
-    sharedUsers: visibility === 'shared' ? sharedUsers : [],
-  })
+export async function createProject(name: string, ownerId: string): Promise<Project> {
+  const sort_order = await nextOrder('projects')
+  // New projects are private (is_public=false, no members) and owned by the creator.
+  return insertUniqueSlug<Project>('projects', { name, owner: ownerId, is_public: false, sort_order }, name)
 }
 
 export async function createFolder(projectId: string, name: string): Promise<Folder> {
-  const projFilter = pb.filter('project = {:p}', { p: projectId })
-  const slug = await uniqueSlug('folders', name, projFilter)
-  const order = await nextOrder('folders', projFilter)
-  return pb.collection('folders').create<Folder>({ name, slug, project: projectId, order })
+  const sort_order = await nextOrder('folders', { project_id: projectId })
+  return insertUniqueSlug<Folder>('folders', { name, project_id: projectId, sort_order }, name)
 }
 
 export async function createDocument(
@@ -33,35 +34,59 @@ export async function createDocument(
   folderId: string | null,
   title: string,
 ): Promise<DocumentRec> {
-  // Slug is unique per (project, slug) regardless of folder, so scope the slug by project only.
-  const projFilter = pb.filter('project = {:p}', { p: projectId })
-  const slug = await uniqueSlug('documents', title, projFilter)
-  // Order is scoped to siblings (same folder, or project root).
-  const siblingFilter = folderId
-    ? pb.filter('project = {:p} && folder = {:f}', { p: projectId, f: folderId })
-    : pb.filter('project = {:p} && folder = ""', { p: projectId })
-  const order = await nextOrder('documents', siblingFilter)
-  return pb.collection('documents').create<DocumentRec>({
+  const sort_order = await nextOrder('documents', { project_id: projectId, folder_id: folderId })
+  return insertUniqueSlug<DocumentRec>(
+    'documents',
+    { title, project_id: projectId, folder_id: folderId, content: '', sort_order },
     title,
-    slug,
-    project: projectId,
-    folder: folderId ?? '',
-    content: '',
-    order,
-  })
+  )
 }
 
-// Rename keeps the slug stable so existing URLs don't break.
-export async function renameProject(id: string, name: string): Promise<void> {
-  await pb.collection('projects').update(id, { name })
+async function update(table: Table, id: string, patch: Record<string, unknown>): Promise<void> {
+  const { error } = await supabase.from(table).update(patch).eq('id', id)
+  if (error) throw new Error(error.message)
 }
-export async function renameFolder(id: string, name: string): Promise<void> {
-  await pb.collection('folders').update(id, { name })
-}
-export async function renameDocument(id: string, title: string): Promise<void> {
-  await pb.collection('documents').update(id, { title })
+export const renameProject = (id: string, name: string) => update('projects', id, { name })
+export const renameFolder = (id: string, name: string) => update('folders', id, { name })
+export const renameDocument = (id: string, title: string) => update('documents', id, { title })
+
+export async function removeRecord(table: Table, id: string): Promise<void> {
+  const { error } = await supabase.from(table).delete().eq('id', id)
+  if (error) throw new Error(error.message)
 }
 
-export async function removeRecord(collection: string, id: string): Promise<void> {
-  await pb.collection(collection).delete(id)
+// ---- sharing ----
+export async function setProjectPublic(projectId: string, isPublic: boolean): Promise<void> {
+  await update('projects', projectId, { is_public: isPublic })
+}
+
+// Resolve an email to a profile via a SECURITY DEFINER RPC (the profiles table itself is not
+// readable by non-admins), so an owner can invite by email like Google Docs.
+export async function findUserByEmail(email: string): Promise<{ id: string; name: string | null; email: string | null } | null> {
+  const { data, error } = await supabase.rpc('find_profile_by_email', { p_email: email })
+  if (error) throw new Error(error.message)
+  const row = (data as { id: string; name: string | null; email: string | null }[] | null)?.[0]
+  return row ?? null
+}
+
+export async function listProjectMembers(projectId: string): Promise<MemberInfo[]> {
+  const { data, error } = await supabase.rpc('list_project_members', { p_project: projectId })
+  if (error) throw new Error(error.message)
+  return (data as MemberInfo[] | null) ?? []
+}
+
+export async function addMember(projectId: string, userId: string, role: MemberRole): Promise<void> {
+  const { error } = await supabase
+    .from('project_members')
+    .upsert({ project_id: projectId, user_id: userId, role }, { onConflict: 'project_id,user_id' })
+  if (error) throw new Error(error.message)
+}
+
+export async function removeMember(projectId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('project_members')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
 }

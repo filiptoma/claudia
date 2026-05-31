@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useDocument, useTree } from '../hooks/useTree'
+import { canEditProject } from '../lib/access'
 import DocView from './DocView'
 import Editor from './Editor'
 import ModeSwitch from './ModeSwitch'
@@ -9,19 +10,23 @@ import type { Mode } from './ModeSwitch'
 
 export default function DocPage() {
   const { projectSlug, docSlug } = useParams()
-  const { isEditor } = useAuth()
-  const { projects, folders, documents, loading: treeLoading } = useTree()
+  const { role, uid } = useAuth()
+  const { projects, folders, documents, members, loading: treeLoading } = useTree()
 
   const project = projects.find((p) => p.slug === projectSlug)
-  const meta = project ? documents.find((d) => d.project === project.id && d.slug === docSlug) : undefined
-  const folder = meta?.folder ? folders.find((f) => f.id === meta.folder) : undefined
+  const meta = project ? documents.find((d) => d.project_id === project.id && d.slug === docSlug) : undefined
+  const folder = meta?.folder_id ? folders.find((f) => f.id === meta.folder_id) : undefined
   const docId = meta?.id
+
+  const myMemberRole = project
+    ? members.find((m) => m.project_id === project.id && m.user_id === uid)?.role
+    : undefined
+  const canEdit = project ? canEditProject(project, role, uid, myMemberRole) : false
 
   const { data: docRec, error } = useDocument(docId)
   const [liveContent, setLiveContent] = useState<string | null>(null)
   const [mode, setMode] = useState<Mode>('view')
 
-  // Reset transient UI when switching documents.
   useEffect(() => {
     setLiveContent(null)
     setMode('view')
@@ -32,7 +37,7 @@ export default function DocPage() {
     return (
       <div className="empty-state">
         <h1>Not found</h1>
-        <p className="muted">This document doesn’t exist.</p>
+        <p className="muted">This document doesn’t exist, or you don’t have access to it.</p>
         <Link className="btn" to="/">
           Go home
         </Link>
@@ -41,10 +46,9 @@ export default function DocPage() {
   }
 
   if (error) return <div className="form-error">{error.message}</div>
-  // Cached docs render instantly; only the very first visit (no cache) shows this.
   if (!docRec) return <div className="doc-loading">Loading…</div>
 
-  const isEdit = isEditor && mode !== 'view'
+  const isEdit = canEdit && mode !== 'view'
   const viewContent = liveContent ?? docRec.content
 
   return (
@@ -57,7 +61,7 @@ export default function DocPage() {
           </div>
           <h1 className="doc-title">{docRec.title}</h1>
         </div>
-        <div className="doc-actions">{isEditor && <ModeSwitch mode={mode} onChange={setMode} />}</div>
+        <div className="doc-actions">{canEdit && <ModeSwitch mode={mode} onChange={setMode} />}</div>
       </header>
 
       {isEdit ? (

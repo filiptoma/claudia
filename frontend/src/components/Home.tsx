@@ -3,22 +3,24 @@ import { ArrowRight, FolderOpen, Plus } from 'lucide-react'
 import { useTree } from '../hooks/useTree'
 import { useAuth } from '../context/AuthContext'
 import { useDialog } from '../context/DialogContext'
+import { canEditProject } from '../lib/access'
 import { createDocument, createProject } from '../lib/crud'
 import type { Project } from '../lib/types'
 
 export default function Home() {
-  const { projects, documents, loading, refresh } = useTree()
-  const { isEditor } = useAuth()
+  const { projects, documents, members, loading, refresh } = useTree()
+  const { user, uid, role } = useAuth()
   const dialog = useDialog()
   const navigate = useNavigate()
 
   const openProject = async (p: Project) => {
-    const docs = documents.filter((d) => d.project === p.id)
+    const docs = documents.filter((d) => d.project_id === p.id)
     if (docs.length > 0) {
       navigate(`/${p.slug}/${docs[0].slug}`)
       return
     }
-    if (!isEditor) return
+    const myRole = members.find((m) => m.project_id === p.id && m.user_id === uid)?.role
+    if (!canEditProject(p, role, uid, myRole)) return
     const title =
       (await dialog.prompt({ title: 'New document', label: 'Document title', confirmText: 'Create' })) || null
     if (!title) return
@@ -28,6 +30,7 @@ export default function Home() {
   }
 
   const onCreateFirst = async () => {
+    if (!uid) return
     const name = await dialog.prompt({
       title: 'New project',
       label: 'Project name',
@@ -35,7 +38,7 @@ export default function Home() {
       confirmText: 'Create',
     })
     if (!name) return
-    const project = await createProject(name)
+    const project = await createProject(name, uid)
     const title =
       (await dialog.prompt({
         title: 'First document',
@@ -60,9 +63,11 @@ export default function Home() {
       {projects.length === 0 ? (
         <div className="home-empty">
           <p className="muted">
-            {isEditor ? 'No projects yet — create your first to get started.' : 'There is no content here yet.'}
+            {user
+              ? 'No projects yet — create your first to get started.'
+              : 'There is no public content here yet. Sign in to see projects shared with you.'}
           </p>
-          {isEditor && (
+          {user && (
             <button className="btn btn-primary" onClick={() => void onCreateFirst()}>
               <Plus size={16} /> Create your first project
             </button>
@@ -71,7 +76,7 @@ export default function Home() {
       ) : (
         <div className="project-grid">
           {projects.map((p) => {
-            const count = documents.filter((d) => d.project === p.id).length
+            const count = documents.filter((d) => d.project_id === p.id).length
             return (
               <button key={p.id} className="project-card" onClick={() => void openProject(p)}>
                 <FolderOpen size={20} className="project-card-icon" />

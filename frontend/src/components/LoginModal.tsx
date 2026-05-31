@@ -44,9 +44,7 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
         onSubmit={(e) => {
           e.preventDefault()
           void run(() =>
-            tab === 'login'
-              ? loginEmail(email, password)
-              : register({ email, password, passwordConfirm: password, name }),
+            tab === 'login' ? loginEmail(email, password) : register({ email, password, name }),
           )
         }}
       >

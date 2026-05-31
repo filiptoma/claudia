@@ -9,17 +9,17 @@ import type { Extension } from '@codemirror/state'
 import { materialDark, materialLight } from '@uiw/codemirror-theme-material'
 import { useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, AlertCircle } from 'lucide-react'
-import { pb, PB_URL, fileUrl } from '../lib/pb'
+import { SUPABASE_ANON_KEY, SUPABASE_URL, getAccessToken, supabase } from '../lib/supabase'
+import { uploadImage } from '../lib/storage'
 import { isInTable } from '../lib/mdTable'
-import { treeKeys } from '../hooks/useTree'
+import { treeKeys, useSignedImages } from '../hooks/useTree'
 import { useTheme } from '../context/ThemeContext'
 import Markdown from './Markdown'
 import EditorToolbar from './EditorToolbar'
-import type { DocumentRec, MediaRec } from '../lib/types'
+import type { DocumentRec } from '../lib/types'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
-// Stable module-level reference so CodeMirror is never reconfigured on parent re-renders.
 const BASIC_SETUP: BasicSetupOptions = {
   lineNumbers: false,
   foldGutter: false,
@@ -56,8 +56,7 @@ function SaveIndicator({
   return <span className="save-status" />
 }
 
-// Memoized so preview/status re-renders of the parent never touch CodeMirror (no flicker / lag).
-// Re-renders only when `theme` (or another prop reference) actually changes.
+// Memoized so preview/status re-renders never touch CodeMirror (no flicker).
 const SourceEditor = memo(function SourceEditor({
   cmRef,
   value,
@@ -99,14 +98,13 @@ export default function Editor({
   const cmRef = useRef<ReactCodeMirrorRef>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Initial value is captured once — we never feed saved/cached content back into CodeMirror,
-  // which avoids the controlled-value cursor-jump race. The component is keyed by doc id upstream.
   const initialValue = useRef(doc.content)
   const latest = useRef(doc.content)
   const dirty = useRef(false)
   const uploadCounter = useRef(0)
   const [preview, setPreview] = useState(doc.content)
   const deferredPreview = useDeferredValue(preview)
+  const previewImages = useSignedImages(deferredPreview)
   const [status, setStatus] = useState<SaveStatus>('idle')
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const [inTable, setInTable] = useState(false)
@@ -121,17 +119,20 @@ export default function Editor({
     const content = latest.current
     dirty.current = false
     setStatus('saving')
-    try {
-      const updated = await pb
-        .collection('documents')
-        .update<DocumentRec>(doc.id, { content }, { requestKey: null })
-      qc.setQueryData(treeKeys.document(doc.id), updated) // refresh cache without a refetch
-      setStatus('saved')
-      setSavedAt(new Date())
-    } catch {
+    const { data, error } = await supabase
+      .from('documents')
+      .update({ content })
+      .eq('id', doc.id)
+      .select()
+      .single()
+    if (error) {
       dirty.current = true
       setStatus('error')
+      return
     }
+    qc.setQueryData(treeKeys.document(doc.id), data) // keep cache fresh without a refetch
+    setStatus('saved')
+    setSavedAt(new Date())
   }, [doc.id, qc])
 
   const handleChange = useCallback(
@@ -149,14 +150,19 @@ export default function Editor({
     [doSave, onContentChange],
   )
 
-  // Flush pending edits on tab close (keepalive PATCH — sendBeacon can't PATCH) and on unmount.
+  // Flush on tab close (keepalive PATCH straight to PostgREST) and on unmount.
   useEffect(() => {
     const onBeforeUnload = () => {
       if (!dirty.current) return
-      fetch(`${PB_URL}/api/collections/documents/records/${doc.id}`, {
+      fetch(`${SUPABASE_URL}/rest/v1/documents?id=eq.${doc.id}`, {
         method: 'PATCH',
         keepalive: true,
-        headers: { 'Content-Type': 'application/json', Authorization: pb.authStore.token },
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${getAccessToken() ?? SUPABASE_ANON_KEY}`,
+          Prefer: 'return=minimal',
+        },
         body: JSON.stringify({ content: latest.current }),
       }).catch(() => {})
     }
@@ -177,12 +183,9 @@ export default function Editor({
       const at = pos ?? view.state.selection.main.head
       view.dispatch({ changes: { from: at, insert: token }, selection: { anchor: at + token.length } })
       try {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('document', doc.id)
-        fd.append('alt', file.name.replace(/\.[^.]+$/, ''))
-        const rec = await pb.collection('media').create<MediaRec>(fd)
-        const md = `![${rec.alt}](${fileUrl(rec, rec.file)})`
+        const path = await uploadImage(doc.project_id, file)
+        const alt = file.name.replace(/\.[^.]+$/, '')
+        const md = `![${alt}](storage:${path})`
         const idx = view.state.doc.toString().indexOf(token)
         if (idx >= 0) view.dispatch({ changes: { from: idx, to: idx + token.length, insert: md } })
       } catch (e) {
@@ -191,10 +194,9 @@ export default function Editor({
         alert('Image upload failed: ' + (e instanceof Error ? e.message : 'error'))
       }
     },
-    [doc.id],
+    [doc.project_id],
   )
 
-  // Stable refs to the drag handlers so the CodeMirror extension never goes stale.
   const dropHandler = useRef<(e: DragEvent, view: EditorView) => boolean>(() => false)
   dropHandler.current = (event, view) => {
     setDropHint(null)
@@ -208,7 +210,6 @@ export default function Editor({
     return true
   }
 
-  // While dragging a file, move the caret to the drop point and show its line/column (HackMD-style).
   const dragOverHandler = useRef<(e: DragEvent, view: EditorView) => boolean>(() => false)
   dragOverHandler.current = (event, view) => {
     if (!event.dataTransfer?.types?.includes('Files')) return false
@@ -279,7 +280,7 @@ export default function Editor({
       </div>
       {showPreview && (
         <div className="editor-preview">
-          <Markdown>{deferredPreview}</Markdown>
+          <Markdown images={previewImages}>{deferredPreview}</Markdown>
         </div>
       )}
       {dropHint && (
