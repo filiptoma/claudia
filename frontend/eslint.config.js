@@ -18,5 +18,13 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Allow `const { node, ...props } = …` to drop a prop without flagging `node` as unused
+      // (the idiomatic react-markdown components pattern), and `_`-prefixed intentional unused.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { ignoreRestSiblings: true, argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
+      ],
+    },
   },
 ])

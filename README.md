@@ -38,7 +38,6 @@ in a project you can't access is genuinely unreachable.
 claudia/
   frontend/                 # Vite + React + TypeScript app
   supabase/migrations/      # 0001_init.sql (schema + RLS + storage) · 0002_sharing_rpcs.sql
-  scripts/                  # (legacy) markdown importer — to be ported to Supabase
   SUPABASE-SETUP.md         # one-time hosted-backend setup
   RUN.md                    # run & build
 ```
@@ -66,6 +65,3 @@ See [RUN.md](RUN.md) for build/deploy details.
 - **Frontend:** `npm run build` → deploy `frontend/dist/` to **Cloudflare Pages** (root `frontend`,
   output `dist`), set the two `VITE_SUPABASE_*` env vars, and add your Pages origin to Supabase →
   Authentication → URL Configuration. SPA fallback: [`frontend/public/_redirects`](frontend/public/_redirects).
-
-> The `pocketbase/` folder is the previous backend implementation, kept for reference during the
-> migration; it can be removed once the Supabase deployment is verified.

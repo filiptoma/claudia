@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useDocument, useTree } from '../hooks/useTree'
@@ -27,10 +27,13 @@ export default function DocPage() {
   const [liveContent, setLiveContent] = useState<string | null>(null)
   const [mode, setMode] = useState<Mode>('view')
 
-  useEffect(() => {
+  // Reset transient UI when switching documents (adjust-state-during-render, no effect needed).
+  const [trackedDoc, setTrackedDoc] = useState(docId)
+  if (trackedDoc !== docId) {
+    setTrackedDoc(docId)
     setLiveContent(null)
     setMode('view')
-  }, [docId])
+  }
 
   if (!project || !meta) {
     if (treeLoading) return <div className="doc-loading">Loading…</div>

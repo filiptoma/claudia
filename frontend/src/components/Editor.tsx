@@ -98,7 +98,8 @@ export default function Editor({
   const cmRef = useRef<ReactCodeMirrorRef>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const initialValue = useRef(doc.content)
+  // Captured once (state initializer) so CodeMirror's value never resets on cache updates.
+  const [initialValue] = useState(doc.content)
   const latest = useRef(doc.content)
   const dirty = useRef(false)
   const uploadCounter = useRef(0)
@@ -197,31 +198,6 @@ export default function Editor({
     [doc.project_id],
   )
 
-  const dropHandler = useRef<(e: DragEvent, view: EditorView) => boolean>(() => false)
-  dropHandler.current = (event, view) => {
-    setDropHint(null)
-    const files = event.dataTransfer?.files
-    if (!files || files.length === 0) return false
-    const image = Array.from(files).find((f) => f.type.startsWith('image/'))
-    if (!image) return false
-    event.preventDefault()
-    const at = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head
-    void uploadAndInsert(image, at)
-    return true
-  }
-
-  const dragOverHandler = useRef<(e: DragEvent, view: EditorView) => boolean>(() => false)
-  dragOverHandler.current = (event, view) => {
-    if (!event.dataTransfer?.types?.includes('Files')) return false
-    event.preventDefault()
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-    if (pos == null) return false
-    view.dispatch({ selection: { anchor: pos } })
-    const line = view.state.doc.lineAt(pos)
-    setDropHint({ line: line.number, col: pos - line.from + 1, x: event.clientX, y: event.clientY })
-    return true
-  }
-
   const extensions = useMemo(
     () => [
       markdown({ base: markdownLanguage, codeLanguages: languages }),
@@ -229,9 +205,30 @@ export default function Editor({
       EditorView.updateListener.of((u) => {
         if (u.selectionSet || u.docChanged || u.focusChanged) setInTable(isInTable(u.view))
       }),
+      // These handlers read the editor ref at event time, not during render — false positive.
+      // eslint-disable-next-line react-hooks/refs
       EditorView.domEventHandlers({
-        drop: (event, view) => dropHandler.current(event, view),
-        dragover: (event, view) => dragOverHandler.current(event, view),
+        drop: (event, view) => {
+          setDropHint(null)
+          const files = event.dataTransfer?.files
+          if (!files || files.length === 0) return false
+          const image = Array.from(files).find((f) => f.type.startsWith('image/'))
+          if (!image) return false
+          event.preventDefault()
+          const at = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head
+          void uploadAndInsert(image, at)
+          return true
+        },
+        dragover: (event, view) => {
+          if (!event.dataTransfer?.types?.includes('Files')) return false
+          event.preventDefault()
+          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+          if (pos == null) return false
+          view.dispatch({ selection: { anchor: pos } })
+          const line = view.state.doc.lineAt(pos)
+          setDropHint({ line: line.number, col: pos - line.from + 1, x: event.clientX, y: event.clientY })
+          return true
+        },
         dragleave: () => {
           setDropHint(null)
           return false
@@ -242,7 +239,7 @@ export default function Editor({
         },
       }),
     ],
-    [],
+    [uploadAndInsert],
   )
 
   const onFilePicked = (e: ChangeEvent<HTMLInputElement>) => {
@@ -271,7 +268,7 @@ export default function Editor({
         </div>
         <SourceEditor
           cmRef={cmRef}
-          value={initialValue.current}
+          value={initialValue}
           theme={cmTheme}
           extensions={extensions}
           onChange={handleChange}

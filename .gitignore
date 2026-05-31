@@ -8,12 +8,6 @@ frontend/dist/
 .env
 .env.local
 
-# PocketBase runtime data + binary (do not commit)
-pocketbase/pb_data/
-pocketbase/pocketbase
-pocketbase/CHANGELOG.md
-pocketbase/LICENSE.md
-
 # local Claude Code settings (personal permission grants)
 .claude/settings.local.json
 
