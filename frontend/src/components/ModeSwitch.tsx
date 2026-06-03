@@ -1,4 +1,5 @@
 import { Eye, Columns2, Pencil } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 export type Mode = 'view' | 'split' | 'edit'
 
@@ -16,19 +17,32 @@ export default function ModeSwitch({
   onChange: (m: Mode) => void
 }) {
   return (
-    <div className="mode-switch" role="tablist" aria-label="View mode">
-      {MODES.map(({ id, label, Icon }) => (
-        <button
-          key={id}
-          role="tab"
-          aria-selected={mode === id}
-          className={mode === id ? 'active' : ''}
-          onClick={() => onChange(id)}
-        >
-          <Icon size={15} aria-hidden />
-          <span>{label}</span>
-        </button>
-      ))}
+    <div
+      role="tablist"
+      aria-label="View mode"
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5"
+    >
+      {MODES.map(({ id, label, Icon }) => {
+        const active = mode === id
+        return (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={active}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[0.82rem] font-medium transition-colors',
+              'focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
+              active
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+            onClick={() => onChange(id)}
+          >
+            <Icon className="size-3.75" aria-hidden />
+            <span className="max-sm:sr-only">{label}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

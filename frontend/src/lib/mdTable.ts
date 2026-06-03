@@ -195,6 +195,21 @@ const insertCol = (m: TableModel, idx: number): NextTable => {
 export const tableAddColRight = op((m) => insertCol(m, m.cursorCol + 1))
 export const tableAddColLeft = op((m) => insertCol(m, m.cursorCol))
 
+export const tableRemoveCol = op((m) => {
+  if (m.headers.length <= 1) return null // never remove the last column
+  const idx = m.cursorCol
+  const headers = m.headers.slice()
+  headers.splice(idx, 1)
+  const aligns = m.aligns.slice()
+  aligns.splice(idx, 1)
+  const rows = m.rows.map((r) => {
+    const nr = r.slice()
+    nr.splice(idx, 1)
+    return nr
+  })
+  return { headers, aligns, rows, targetRow: m.cursorRow, targetCol: Math.min(idx, headers.length - 1) }
+})
+
 const swapCol = (m: TableModel, a: number, b: number): NextTable | null => {
   if (a < 0 || b < 0 || a >= m.headers.length || b >= m.headers.length) return null
   const headers = m.headers.slice()

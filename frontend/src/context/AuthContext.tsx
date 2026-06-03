@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { User } from '@supabase/supabase-js'
 import { setAccessToken, supabase } from '../lib/supabase'
+import { queryClient } from '../lib/queryClient'
 import { isStaffRole } from '../lib/access'
 import type { Profile, Role } from '../lib/types'
 
@@ -23,30 +25,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null)
   const [uid, setUid] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const prevUid = useRef<string | null | undefined>(undefined)
 
   useEffect(() => {
     let active = true
 
-    const sync = async (userId: string | null, token: string | null) => {
+    // Fallback profile from the auth user's own metadata, used when the `profiles` row can't be
+    // read (transient error / RLS race) so a persisted session never looks signed-out on reload.
+    const fallbackProfile = (u: User): Profile => ({
+      id: u.id,
+      email: u.email ?? null,
+      name: (u.user_metadata?.name as string | undefined) ?? null,
+      role: 'basic',
+      created_at: u.created_at ?? new Date().toISOString(),
+    })
+
+    const sync = async (authUser: User | null, token: string | null) => {
       setAccessToken(token)
-      setUid(userId)
-      if (!userId) {
+      const nextUid = authUser?.id ?? null
+      setUid(nextUid)
+      // When the signed-in user actually changes (login / logout), drop all cached query data so
+      // RLS-scoped lists (projects, folders, …) refetch with the new permissions. Skipped on the
+      // very first sync and on token refreshes (uid unchanged).
+      if (prevUid.current !== undefined && prevUid.current !== nextUid) {
+        void queryClient.invalidateQueries()
+      }
+      prevUid.current = nextUid
+      if (!authUser) {
         if (active) setUser(null)
         return
       }
-      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
-      if (active) setUser((data as Profile | null) ?? null)
+      const { data } = await supabase.from('profiles').select('*').eq('id', authUser.id).single()
+      if (active) setUser((data as Profile | null) ?? fallbackProfile(authUser))
     }
 
     supabase.auth.getSession().then(({ data }) => {
       const s = data.session
-      void sync(s?.user.id ?? null, s?.access_token ?? null).finally(() => {
+      void sync(s?.user ?? null, s?.access_token ?? null).finally(() => {
         if (active) setLoading(false)
       })
     })
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      void sync(session?.user.id ?? null, session?.access_token ?? null)
+      void sync(session?.user ?? null, session?.access_token ?? null)
     })
 
     return () => {

@@ -10,5 +10,5 @@ interface ImportMeta {
 }
 
 // Fontsource packages are CSS-only side-effect imports without bundled types.
-declare module '@fontsource-variable/inter'
+declare module '@fontsource-variable/hanken-grotesk'
 declare module '@fontsource-variable/jetbrains-mono'

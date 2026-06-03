@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import {
   Bold,
   Italic,
@@ -10,16 +11,18 @@ import {
   ListOrdered,
   Quote,
   Image as ImageIcon,
+  AtSign,
   Table,
   Minus,
+  Plus,
+  RotateCcw,
   BetweenHorizontalEnd,
   BetweenVerticalEnd,
-  BetweenVerticalStart,
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  Trash2,
+  ArrowUpFromLine,
+  ArrowDownFromLine,
+  ArrowLeftFromLine,
+  ArrowRightFromLine,
+  SquareMinus,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -28,14 +31,17 @@ import {
 import type { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
 import type { ChangeSpec } from '@codemirror/state'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  tableAddColLeft,
   tableAddColRight,
   tableAddRow,
   tableMoveColLeft,
   tableMoveColRight,
   tableMoveRowDown,
   tableMoveRowUp,
+  tableRemoveCol,
   tableRemoveRow,
   tableSetAlign,
 } from '../lib/mdTable'
@@ -120,7 +126,9 @@ const insertBlock =
 const TABLE_TEMPLATE =
   '| Column 1 | Column 2 | Column 3 |\n| -------- | -------- | -------- |\n| Text     | Text     | Text     |'
 
-const BASE_BUTTONS: { title: string; Icon: typeof Bold; cmd: Cmd }[] = [
+type ButtonDef = { title: string; Icon: typeof Bold; cmd: Cmd }
+
+const BASE_BUTTONS: ButtonDef[] = [
   { title: 'Bold', Icon: Bold, cmd: wrap('**') },
   { title: 'Italic', Icon: Italic, cmd: wrap('*') },
   { title: 'Strikethrough', Icon: Strikethrough, cmd: wrap('~~') },
@@ -133,64 +141,186 @@ const BASE_BUTTONS: { title: string; Icon: typeof Bold; cmd: Cmd }[] = [
   { title: 'Quote', Icon: Quote, cmd: prefixLines(() => '> ') },
 ]
 
-const INSERT_BUTTONS: { title: string; Icon: typeof Bold; cmd: Cmd }[] = [
+const INSERT_BUTTONS: ButtonDef[] = [
   { title: 'Insert table', Icon: Table, cmd: insertBlock(TABLE_TEMPLATE) },
   { title: 'Horizontal line', Icon: Minus, cmd: insertBlock('---') },
 ]
 
-const TABLE_BUTTONS: { title: string; Icon: typeof Bold; cmd: Cmd }[] = [
-  { title: 'Insert row below', Icon: BetweenHorizontalEnd, cmd: tableAddRow },
-  { title: 'Delete row', Icon: Trash2, cmd: tableRemoveRow },
-  { title: 'Move row up', Icon: ArrowUp, cmd: tableMoveRowUp },
-  { title: 'Move row down', Icon: ArrowDown, cmd: tableMoveRowDown },
+// Table controls, grouped for the second toolbar row (shown only when the cursor is in a table).
+const ROW_BUTTONS: ButtonDef[] = [
+  { title: 'Add row below', Icon: BetweenHorizontalEnd, cmd: tableAddRow },
+  { title: 'Delete row', Icon: SquareMinus, cmd: tableRemoveRow },
+  { title: 'Move row up', Icon: ArrowUpFromLine, cmd: tableMoveRowUp },
+  { title: 'Move row down', Icon: ArrowDownFromLine, cmd: tableMoveRowDown },
+]
+const COLUMN_BUTTONS: ButtonDef[] = [
   { title: 'Add column right', Icon: BetweenVerticalEnd, cmd: tableAddColRight },
-  { title: 'Insert column left', Icon: BetweenVerticalStart, cmd: tableAddColLeft },
-  { title: 'Move column left', Icon: ArrowLeft, cmd: tableMoveColLeft },
-  { title: 'Move column right', Icon: ArrowRight, cmd: tableMoveColRight },
+  { title: 'Delete column', Icon: SquareMinus, cmd: tableRemoveCol },
+  { title: 'Move column left', Icon: ArrowLeftFromLine, cmd: tableMoveColLeft },
+  { title: 'Move column right', Icon: ArrowRightFromLine, cmd: tableMoveColRight },
+]
+const ALIGN_BUTTONS: ButtonDef[] = [
   { title: 'Align left', Icon: AlignLeft, cmd: tableSetAlign('left') },
   { title: 'Align center', Icon: AlignCenter, cmd: tableSetAlign('center') },
   { title: 'Align right', Icon: AlignRight, cmd: tableSetAlign('right') },
   { title: 'Align none', Icon: Ban, cmd: tableSetAlign('none') },
 ]
 
+function ToolButton({
+  title,
+  onClick,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 text-muted-foreground hover:text-foreground"
+          aria-label={title}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{title}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+const ToolSep = () => <Separator orientation="vertical" className="mx-1 h-5!" />
+
+// A labelled cluster of table buttons (Row / Column / Alignment) for the second toolbar row.
+function ToolGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="px-1 text-[0.62rem] leading-none font-semibold tracking-wide text-muted-foreground/70 uppercase">
+        {label}
+      </span>
+      <div className="flex items-center gap-0.5">{children}</div>
+    </div>
+  )
+}
+
+function ButtonRow({ buttons, run }: { buttons: ButtonDef[]; run: (cmd: Cmd) => () => void }) {
+  return (
+    <>
+      {buttons.map(({ title, Icon, cmd }) => (
+        <ToolButton key={title} title={title} onClick={run(cmd)}>
+          <Icon />
+        </ToolButton>
+      ))}
+    </>
+  )
+}
+
+// When the cursor sits inside an image, the toolbar collapses to just image-size controls: shrink /
+// grow (aspect ratio preserved — only the width changes) plus a reset, with the current width shown.
+function ImageControls({
+  width,
+  onWider,
+  onNarrower,
+  onReset,
+}: {
+  width: number | null
+  onWider: () => void
+  onNarrower: () => void
+  onReset: () => void
+}) {
+  return (
+    <div className="flex items-center gap-0.5">
+      <span className="mr-1 flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
+        <ImageIcon className="size-4" /> Image
+      </span>
+      <ToolButton title="Smaller" onClick={onNarrower}>
+        <Minus />
+      </ToolButton>
+      <span className="min-w-14 text-center text-xs tabular-nums text-muted-foreground">
+        {width ? `${width}px` : 'auto'}
+      </span>
+      <ToolButton title="Larger" onClick={onWider}>
+        <Plus />
+      </ToolButton>
+      <ToolSep />
+      <ToolButton title="Reset size" onClick={onReset}>
+        <RotateCcw />
+      </ToolButton>
+    </div>
+  )
+}
+
 export default function EditorToolbar({
   getView,
   onImageClick,
+  onRefClick,
   inTable,
+  inImage,
+  imageWidth,
+  onImageWider,
+  onImageNarrower,
+  onImageResetSize,
 }: {
   getView: () => EditorView | null
   onImageClick: () => void
+  onRefClick: () => void
   inTable: boolean
+  inImage: boolean
+  imageWidth: number | null
+  onImageWider: () => void
+  onImageNarrower: () => void
+  onImageResetSize: () => void
 }) {
   const run = (cmd: Cmd) => () => {
     const view = getView()
     if (view) cmd(view)
   }
+
+  // Image context: show only the image-size controls.
+  if (inImage) {
+    return (
+      <ImageControls
+        width={imageWidth}
+        onWider={onImageWider}
+        onNarrower={onImageNarrower}
+        onReset={onImageResetSize}
+      />
+    )
+  }
+
   return (
-    <div className="toolbar">
-      {BASE_BUTTONS.map(({ title, Icon, cmd }) => (
-        <button key={title} className="icon-btn" title={title} aria-label={title} onClick={run(cmd)}>
-          <Icon size={16} />
-        </button>
-      ))}
-      <span className="toolbar-sep" />
-      {INSERT_BUTTONS.map(({ title, Icon, cmd }) => (
-        <button key={title} className="icon-btn" title={title} aria-label={title} onClick={run(cmd)}>
-          <Icon size={16} />
-        </button>
-      ))}
-      <button className="icon-btn" title="Insert image" aria-label="Insert image" onClick={onImageClick}>
-        <ImageIcon size={16} />
-      </button>
+    <div className="flex flex-col gap-1">
+      {/* Line 1: the standard formatting controls. */}
+      <div className="flex flex-wrap items-center gap-0.5">
+        <ButtonRow buttons={BASE_BUTTONS} run={run} />
+        <ToolSep />
+        <ButtonRow buttons={INSERT_BUTTONS} run={run} />
+        <ToolButton title="Insert image" onClick={onImageClick}>
+          <ImageIcon />
+        </ToolButton>
+        <ToolButton title="Insert reference (type / in the editor)" onClick={onRefClick}>
+          <AtSign />
+        </ToolButton>
+      </div>
+      {/* Line 2: table controls (Row / Column / Alignment), only while the cursor is in a table. */}
       {inTable && (
-        <>
-          <span className="toolbar-sep" />
-          {TABLE_BUTTONS.map(({ title, Icon, cmd }) => (
-            <button key={title} className="icon-btn" title={title} aria-label={title} onClick={run(cmd)}>
-              <Icon size={16} />
-            </button>
-          ))}
-        </>
+        <div className="flex flex-wrap items-stretch gap-1.5 border-t border-border/60 pt-1">
+          <ToolGroup label="Row">
+            <ButtonRow buttons={ROW_BUTTONS} run={run} />
+          </ToolGroup>
+          <Separator orientation="vertical" className="mx-0.5" />
+          <ToolGroup label="Column">
+            <ButtonRow buttons={COLUMN_BUTTONS} run={run} />
+          </ToolGroup>
+          <Separator orientation="vertical" className="mx-0.5" />
+          <ToolGroup label="Alignment">
+            <ButtonRow buttons={ALIGN_BUTTONS} run={run} />
+          </ToolGroup>
+        </div>
       )}
     </div>
   )

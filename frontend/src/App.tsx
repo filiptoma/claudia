@@ -1,11 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Menu } from 'lucide-react'
-import Sidebar from './components/Sidebar'
+import AppLayout from './components/AppLayout'
+import AppToaster from './components/AppToaster'
 import Home from './components/Home'
-import DocPage from './components/DocPage'
+import ProjectScreen from './components/ProjectScreen'
+import ProjectSettings from './components/ProjectSettings'
+import AdminDashboard from './components/AdminDashboard'
 import AdminUsers from './components/AdminUsers'
+import AdminProjects from './components/AdminProjects'
+import QuickNotesPage from './components/QuickNotesPage'
+import QuickNoteDetail from './components/QuickNoteDetail'
+import Profile from './components/Profile'
+import { FullPageSpinner } from './components/ui/spinner'
+import { useAuth } from './context/AuthContext'
 import { fetchDocument, treeKeys, useTree } from './hooks/useTree'
 
 // Warm the ['document', id] cache in the background so first navigations are instant too.
@@ -24,29 +32,37 @@ function usePrefetchDocuments() {
 }
 
 export default function App() {
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const { loading: authLoading } = useAuth()
+  const tree = useTree()
   usePrefetchDocuments()
+
+  // Whole-app gate: don't render the shell until the required initializations are ready — the
+  // session/role (auth) AND the core tree the always-visible sidebar + routing depend on.
+  const booting = authLoading || tree.loading
+
   return (
-    <div className="app">
-      <Sidebar drawerOpen={drawerOpen} onCloseDrawer={() => setDrawerOpen(false)} />
-      {drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
-      <main className="main">
-        <button
-          className="hamburger icon-btn"
-          aria-label="Open menu"
-          onClick={() => setDrawerOpen(true)}
-        >
-          <Menu size={20} />
-        </button>
-        <div className="main-scroll">
-          <Routes>
+    <>
+      <AppToaster />
+      {booting ? (
+        <FullPageSpinner />
+      ) : (
+        <Routes>
+          <Route element={<AppLayout />}>
             <Route path="/" element={<Home />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/users" element={<AdminUsers />} />
-            <Route path="/:projectSlug/:docSlug" element={<DocPage />} />
+            <Route path="/admin/projects" element={<AdminProjects />} />
+            <Route path="/:projectSlug" element={<ProjectScreen />} />
+            <Route path="/:projectSlug/settings" element={<ProjectSettings />} />
+            <Route path="/:projectSlug/notes" element={<QuickNotesPage />} />
+            <Route path="/:projectSlug/notes/:id" element={<QuickNoteDetail />} />
+            <Route path="/:projectSlug/:seg1" element={<ProjectScreen />} />
+            <Route path="/:projectSlug/:seg1/:seg2" element={<ProjectScreen />} />
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
-      </main>
-    </div>
+          </Route>
+        </Routes>
+      )}
+    </>
   )
 }

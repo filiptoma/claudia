@@ -1,7 +1,17 @@
-import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
-import { X } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
+/**
+ * Thin wrapper over the shadcn Dialog that preserves the original Modal API
+ * (always-mounted-when-open, with `title` / `onClose` / `children` / `footer`).
+ * Radix handles focus trapping, Escape, and outside-click for us.
+ */
 export default function Modal({
   title,
   onClose,
@@ -13,37 +23,15 @@ export default function Modal({
   children: ReactNode
   footer?: ReactNode
 }) {
-  const cardRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    // move focus into the dialog
-    cardRef.current?.querySelector<HTMLElement>('input, button, [tabindex]')?.focus()
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        ref={cardRef}
-        className="modal-card"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-head">
-          <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-foot">{footer}</div>}
-      </div>
-    </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div>{children}</div>
+        {footer && <DialogFooter>{footer}</DialogFooter>}
+      </DialogContent>
+    </Dialog>
   )
 }

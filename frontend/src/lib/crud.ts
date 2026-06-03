@@ -1,3 +1,4 @@
+import { customAlphabet } from 'nanoid'
 import { supabase } from './supabase'
 import { nextOrder } from './order'
 import { slugify } from './slug'
@@ -5,15 +6,54 @@ import type { DocumentRec, Folder, MemberInfo, MemberRole, Project } from './typ
 
 type Table = 'projects' | 'folders' | 'documents'
 
-// Insert, retrying with -2/-3/… on a unique-slug conflict. Needed because RLS can hide a
-// colliding project slug from the client, so we can't reliably pre-check uniqueness.
-async function insertUniqueSlug<T>(table: Table, fields: Record<string, unknown>, slugBase: string): Promise<T> {
-  const root = slugify(slugBase)
-  for (let i = 0; ; i++) {
-    const slug = i === 0 ? root : `${root}-${i + 1}`
-    const { data, error } = await supabase.from(table).insert({ ...fields, slug }).select().single()
+// 4-char url-safe id suffixed onto project AND folder slugs ("exam-3kf9"). It keeps the URL stable
+// and collision-free while the readable part follows the name — so renaming re-slugs the name part
+// but never the id, and reserved words like "settings"/"notes" can never clash. (Workspace: "my".)
+const shortId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 4)
+
+// Documents are addressed by a short, readable nanoid (e.g. "/proj/k3f9b1qa"), NOT a title-derived
+// slug — so renaming a document never leaves the URL out of sync with its title (which would be
+// confusing). Long enough to never collide, short enough to stay legible (unlike a uuid).
+const documentSlug = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 8)
+
+// Insert a project/folder as "<slugified-name>-<nanoid>", regenerating the nanoid on the
+// (vanishingly rare) unique conflict. RLS can hide a colliding slug, so we can't pre-check it.
+async function insertWithNanoidSlug<T>(
+  table: 'projects' | 'folders',
+  fields: Record<string, unknown>,
+  name: string,
+): Promise<T> {
+  const base = slugify(name)
+  for (;;) {
+    const { data, error } = await supabase
+      .from(table)
+      .insert({ ...fields, slug: `${base}-${shortId()}` })
+      .select()
+      .single()
     if (!error) return data as T
-    if (error.code === '23505') continue // unique_violation -> bump slug
+    if (error.code === '23505') continue // unique_violation -> new nanoid
+    throw new Error(error.message)
+  }
+}
+
+// Re-slug a project/folder from a new name while preserving its existing nanoid suffix, so the URL
+// reflects the rename but the id (and therefore links to it) stays stable.
+function reslugKeepingNanoid(currentSlug: string, name: string): string {
+  const parts = currentSlug.split('-')
+  const nano = parts.length > 1 ? parts[parts.length - 1] : shortId()
+  return `${slugify(name)}-${nano}`
+}
+
+// Insert a document, retrying with a fresh nanoid slug on the (vanishingly rare) unique conflict.
+async function insertDocument(fields: Record<string, unknown>): Promise<DocumentRec> {
+  for (;;) {
+    const { data, error } = await supabase
+      .from('documents')
+      .insert({ ...fields, slug: documentSlug() })
+      .select()
+      .single()
+    if (!error) return data as DocumentRec
+    if (error.code === '23505') continue // unique_violation -> new nanoid
     throw new Error(error.message)
   }
 }
@@ -21,12 +61,12 @@ async function insertUniqueSlug<T>(table: Table, fields: Record<string, unknown>
 export async function createProject(name: string, ownerId: string): Promise<Project> {
   const sort_order = await nextOrder('projects')
   // New projects are private (is_public=false, no members) and owned by the creator.
-  return insertUniqueSlug<Project>('projects', { name, owner: ownerId, is_public: false, sort_order }, name)
+  return insertWithNanoidSlug<Project>('projects', { name, owner: ownerId, is_public: false, sort_order }, name)
 }
 
 export async function createFolder(projectId: string, name: string): Promise<Folder> {
   const sort_order = await nextOrder('folders', { project_id: projectId })
-  return insertUniqueSlug<Folder>('folders', { name, project_id: projectId, sort_order }, name)
+  return insertWithNanoidSlug<Folder>('folders', { name, project_id: projectId, sort_order }, name)
 }
 
 export async function createDocument(
@@ -35,19 +75,53 @@ export async function createDocument(
   title: string,
 ): Promise<DocumentRec> {
   const sort_order = await nextOrder('documents', { project_id: projectId, folder_id: folderId })
-  return insertUniqueSlug<DocumentRec>(
-    'documents',
-    { title, project_id: projectId, folder_id: folderId, content: '', sort_order },
-    title,
-  )
+  return insertDocument({ title, project_id: projectId, folder_id: folderId, content: '', sort_order })
+}
+
+// A quick note is a titleless root document flagged is_quick_note, created with one click in the
+// user's workspace. Like every document its slug is a nanoid (see insertDocument).
+export async function createQuickNote(workspaceId: string): Promise<DocumentRec> {
+  const sort_order = await nextOrder('documents', { project_id: workspaceId, folder_id: null })
+  return insertDocument({
+    title: '',
+    project_id: workspaceId,
+    folder_id: null,
+    content: '',
+    is_quick_note: true,
+    sort_order,
+  })
 }
 
 async function update(table: Table, id: string, patch: Record<string, unknown>): Promise<void> {
   const { error } = await supabase.from(table).update(patch).eq('id', id)
   if (error) throw new Error(error.message)
 }
-export const renameProject = (id: string, name: string) => update('projects', id, { name })
-export const renameFolder = (id: string, name: string) => update('folders', id, { name })
+
+// Renaming a project re-slugs it from the new name but KEEPS its 4-char nanoid suffix (so the URL
+// reflects the name yet never collides). The workspace's slug ("my") is fixed and never changes.
+// Returns the resulting slug so the caller can keep the URL in sync.
+export async function renameProject(
+  project: Pick<Project, 'id' | 'slug' | 'is_workspace'>,
+  name: string,
+): Promise<string> {
+  const patch: Record<string, unknown> = { name }
+  // The workspace's slug ("my") is fixed; every other project re-slugs but keeps its nanoid.
+  const newSlug = project.is_workspace ? project.slug : reslugKeepingNanoid(project.slug, name)
+  if (!project.is_workspace) patch.slug = newSlug
+  const { error } = await supabase.from('projects').update(patch).eq('id', project.id)
+  if (error) throw new Error(error.message)
+  return newSlug
+}
+
+// Renaming a folder re-slugs it from the new name but keeps its nanoid (same scheme as projects).
+// Returns the resulting slug so the caller can keep the URL in sync.
+export async function renameFolder(folder: Pick<Folder, 'id' | 'slug'>, name: string): Promise<string> {
+  const newSlug = reslugKeepingNanoid(folder.slug, name)
+  const { error } = await supabase.from('folders').update({ name, slug: newSlug }).eq('id', folder.id)
+  if (error) throw new Error(error.message)
+  return newSlug
+}
+
 export const renameDocument = (id: string, title: string) => update('documents', id, { title })
 
 export async function removeRecord(table: Table, id: string): Promise<void> {

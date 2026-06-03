@@ -1,0 +1,31 @@
+# Keeps the PROD Supabase project from auto-pausing.
+# A free Supabase project pauses after 7 days of inactivity; once paused, the live site
+# cold-starts (errors / long wait) on the first visitor. A daily REST request counts as activity.
+#
+# Setup: repo → Settings → Secrets and variables → Actions → add
+#   PROD_SUPABASE_URL        = https://<prod-ref>.supabase.co
+#   PROD_PUBLISHABLE_KEY     = sb_publishable_…   (browser-safe; RLS protects data)
+#
+# Note: GitHub disables scheduled workflows after 60 days with no repo commits — fine for an active
+# repo. Alternative: a free uptime monitor (cron-job.org / UptimeRobot) hitting the same URL.
+
+name: keepalive
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily, 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping prod Supabase REST
+        env:
+          URL: ${{ secrets.PROD_SUPABASE_URL }}
+          KEY: ${{ secrets.PROD_PUBLISHABLE_KEY }}
+        run: |
+          curl -fsS "$URL/rest/v1/profiles?select=id&limit=1" \
+            -H "apikey: $KEY" \
+            -H "Authorization: Bearer $KEY" > /dev/null
+          echo "Pinged $URL — prod kept awake."

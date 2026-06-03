@@ -1,49 +1,48 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
+  ArrowRight,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   FilePlus,
-  FileText,
-  Folder as FolderIcon,
   FolderPlus,
-  Globe,
-  Lock,
+  LogOut,
   Moon,
+  MoreHorizontal,
   Pencil,
   Plus,
   Settings,
   Sun,
   Trash2,
-  Users,
+  User,
 } from 'lucide-react'
-import ProjectSettings from './ProjectSettings'
+import LoginModal from './LoginModal'
+import ActionsMenu from './ActionsMenu'
+import type { MenuAction } from './ActionsMenu'
+import { DocIcon, FolderGlyph, ProjectGlyph, QuickNoteIcon } from './EntityIcons'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useTree } from '../hooks/useTree'
 import type { DocMeta } from '../hooks/useTree'
-import { useDialog } from '../context/DialogContext'
-import LoginModal from './LoginModal'
-import { canEditProject, canManageProject, projectVisibility } from '../lib/access'
+import { useTreeActions } from '../hooks/useTreeActions'
+import { useRouteContext } from '../hooks/useRouteContext'
+import { useQuickNotes } from '../hooks/useQuickNotes'
+import { canConfigureProject, canEditProject, projectVisibility } from '../lib/access'
+import { docPath, docSplitPath, folderPath, notePath, notesPath, noteSplitPath, projectPath, projectSettingsPath } from '../lib/paths'
+import { docLabel } from '../lib/labels'
+import { APP_NAME } from '../lib/brand'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
-  createDocument,
-  createFolder,
-  createProject,
-  removeRecord,
-  renameDocument,
-  renameFolder,
-  renameProject,
-} from '../lib/crud'
-import type { Folder, MemberRole, Project } from '../lib/types'
-
-const reportError = (e: unknown) => alert(e instanceof Error ? e.message : 'Action failed')
-
-function VisibilityIcon({ v, size = 13 }: { v: string; size?: number }) {
-  if (v === 'public') return <Globe size={size} />
-  if (v === 'shared') return <Users size={size} />
-  return <Lock size={size} />
-}
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
+import type { MemberRole, Project, Visibility } from '../lib/types'
 
 export default function Sidebar({
   drawerOpen,
@@ -52,349 +51,356 @@ export default function Sidebar({
   drawerOpen: boolean
   onCloseDrawer: () => void
 }) {
-  const { projects, folders, documents, members, refresh } = useTree()
-  const { user, uid, role, isAdmin, logout } = useAuth()
+  const { currentProject, folder: activeFolder, doc: activeDoc } = useRouteContext()
+  const { user, uid, role, logout } = useAuth()
   const { theme, toggle } = useTheme()
-  const dialog = useDialog()
+  const { folders, documents, members, refresh } = useTree()
+  const { notes: quickNotes } = useQuickNotes()
+  const { id: activeNoteId } = useParams()
+  const actions = useTreeActions()
   const navigate = useNavigate()
-  const { projectSlug, docSlug } = useParams()
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [showLogin, setShowLogin] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const lastSyncedSlug = useRef<string | undefined>(undefined)
 
-  // Per-project access maps derived from the membership rows the user can see.
-  const memberCount = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const x of members) m.set(x.project_id, (m.get(x.project_id) ?? 0) + 1)
-    return m
-  }, [members])
+  const proj = currentProject
   const myRole = useMemo(() => {
     const m = new Map<string, MemberRole>()
     for (const x of members) if (x.user_id === uid) m.set(x.project_id, x.role)
     return m
   }, [members, uid])
-  const canEdit = (p: Project) => canEditProject(p, role, uid, myRole.get(p.id))
-  const canManage = (p: Project) => canManageProject(p, role, uid)
-  const visOf = (p: Project) => projectVisibility(p, memberCount.get(p.id) ?? 0)
+  const memberCount = (id: string) => members.filter((m) => m.project_id === id).length
+  const canEdit = proj ? canEditProject(proj, role, uid, myRole.get(proj.id)) : false
+  const canConfigure = proj ? canConfigureProject(proj, role, uid) : false
+  const visOf = (p: Project): Visibility => projectVisibility(p, memberCount(p.id))
 
-  useEffect(() => {
-    const p = projects.find((x) => x.slug === projectSlug)
-    if (projectSlug && p && projectSlug !== lastSyncedSlug.current) {
-      lastSyncedSlug.current = projectSlug
-      setSelectedProjectId(p.id)
-    }
-  }, [projectSlug, projects])
-
-  const toggleCollapse = (id: string) =>
+  const collapse = (id: string, value: boolean) =>
     setCollapsed((s) => {
+      if (s.has(id) === value) return s
       const n = new Set(s)
-      if (n.has(id)) n.delete(id)
-      else n.add(id)
+      if (value) n.add(id)
+      else n.delete(id)
       return n
     })
 
-  const selectedProject = selectedProjectId
-    ? projects.find((p) => p.id === selectedProjectId) ?? null
-    : null
-
-  // ---- actions ----
-  const onCreateProject = () =>
-    dialog
-      .prompt({ title: 'New project', label: 'Project name', confirmText: 'Create' })
-      .then((name) => (name && uid ? createProject(name, uid).then(() => refresh()) : undefined))
-      .catch(reportError)
-
-  const onRenameProject = (p: Project) =>
-    dialog
-      .prompt({ title: 'Rename project', label: 'Name', defaultValue: p.name, confirmText: 'Rename' })
-      .then((name) => (name && name !== p.name ? renameProject(p.id, name).then(() => refresh()) : undefined))
-      .catch(reportError)
-
-  const onDeleteProject = (p: Project) => {
-    const fcount = folders.filter((f) => f.project_id === p.id).length
-    const dcount = documents.filter((d) => d.project_id === p.id).length
-    return dialog
-      .confirm({
-        title: 'Delete project',
-        message: `Delete “${p.name}” and its ${fcount} folder(s) and ${dcount} document(s)? This cannot be undone.`,
-        confirmText: 'Delete',
-        danger: true,
-      })
-      .then(async (ok) => {
-        if (!ok) return
-        await removeRecord('projects', p.id)
-        if (selectedProjectId === p.id) setSelectedProjectId(null)
-        await refresh()
-        if (p.slug === projectSlug) navigate('/')
-      })
-      .catch(reportError)
+  const onCreateProject = async () => {
+    const p = await actions.newProject()
+    if (p) {
+      onCloseDrawer()
+      navigate(projectPath(p.slug))
+    }
+  }
+  const onCreateDoc = async (p: Project, folderId: string | null) => {
+    const doc = await actions.newDocument(p, folderId)
+    if (doc) {
+      onCloseDrawer()
+      navigate(docSplitPath(p.slug, doc, folders))
+    }
+  }
+  const onNewQuickNote = async (p: Project) => {
+    const note = await actions.newQuickNote()
+    if (note) {
+      onCloseDrawer()
+      navigate(noteSplitPath(p.slug, note.slug))
+    }
+  }
+  const onDeleteFolder = async (p: Project, folderId: string, folderObj: Parameters<typeof actions.deleteFolder>[0]) => {
+    const wasActive = activeFolder?.id === folderId || documents.some((d) => d.folder_id === folderId && d.id === activeDoc?.id)
+    if (await actions.deleteFolder(folderObj) && wasActive) navigate(projectPath(p.slug))
+  }
+  const onDeleteDoc = async (p: Project, d: DocMeta) => {
+    if ((await actions.deleteDocument(d)) && activeDoc?.id === d.id) navigate(projectPath(p.slug))
+  }
+  const onDeleteProject = async (p: Project) => {
+    if (await actions.deleteProject(p)) navigate('/')
+  }
+  const onSignOut = async () => {
+    await logout()
+    await refresh()
+    onCloseDrawer()
+    navigate('/')
   }
 
-  const onCreateFolder = (p: Project) =>
-    dialog
-      .prompt({ title: 'New folder', label: 'Folder name', confirmText: 'Create' })
-      .then((name) => (name ? createFolder(p.id, name).then(() => refresh()) : undefined))
-      .catch(reportError)
-
-  const onRenameFolder = (f: Folder) =>
-    dialog
-      .prompt({ title: 'Rename folder', label: 'Name', defaultValue: f.name, confirmText: 'Rename' })
-      .then((name) => (name && name !== f.name ? renameFolder(f.id, name).then(() => refresh()) : undefined))
-      .catch(reportError)
-
-  const onDeleteFolder = (f: Folder) => {
-    const dcount = documents.filter((d) => d.folder_id === f.id).length
-    return dialog
-      .confirm({
-        title: 'Delete folder',
-        message: `Delete folder “${f.name}” and its ${dcount} document(s)? This cannot be undone.`,
-        confirmText: 'Delete',
-        danger: true,
-      })
-      .then(async (ok) => {
-        if (!ok) return
-        const hadActive = documents.some(
-          (d) => d.folder_id === f.id && d.slug === docSlug && d.project_id === f.project_id,
-        )
-        await removeRecord('folders', f.id)
-        await refresh()
-        if (hadActive) navigate('/')
-      })
-      .catch(reportError)
-  }
-
-  const onCreateDoc = (p: Project, folderId: string | null) =>
-    dialog
-      .prompt({ title: 'New document', label: 'Document title', confirmText: 'Create' })
-      .then(async (title) => {
-        if (!title) return
-        const doc = await createDocument(p.id, folderId, title)
-        await refresh()
-        onCloseDrawer()
-        navigate(`/${p.slug}/${doc.slug}`)
-      })
-      .catch(reportError)
-
-  const onRenameDoc = (d: DocMeta) =>
-    dialog
-      .prompt({ title: 'Rename document', label: 'Title', defaultValue: d.title, confirmText: 'Rename' })
-      .then((title) => (title && title !== d.title ? renameDocument(d.id, title).then(() => refresh()) : undefined))
-      .catch(reportError)
-
-  const onDeleteDoc = (d: DocMeta, p: Project) =>
-    dialog
-      .confirm({
-        title: 'Delete document',
-        message: `Delete “${d.title}”? This cannot be undone.`,
-        confirmText: 'Delete',
-        danger: true,
-      })
-      .then(async (ok) => {
-        if (!ok) return
-        await removeRecord('documents', d.id)
-        await refresh()
-        if (p.slug === projectSlug && d.slug === docSlug) navigate('/')
-      })
-      .catch(reportError)
-
-  // ---- row renderers ----
-  const docRow = (d: DocMeta, p: Project, editable: boolean) => {
-    const active = p.slug === projectSlug && d.slug === docSlug
+  // ---- doc row ----
+  const docRow = (d: DocMeta, p: Project, editable: boolean, folderSlug: string | null) => {
+    const active = activeDoc?.id === d.id
+    const Icon = d.is_quick_note ? QuickNoteIcon : DocIcon
+    const menu: MenuAction[] = [
+      { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editDocument(d) },
+      { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => void onDeleteDoc(p, d) },
+    ]
     return (
-      <div key={d.id} className={`doc-row ${active ? 'active' : ''}`}>
-        <Link className="doc-link" to={`/${p.slug}/${d.slug}`} onClick={onCloseDrawer}>
-          <FileText size={15} className="row-icon" />
-          <span className="row-label">{d.title}</span>
-        </Link>
-        {editable && (
-          <div className="row-actions">
-            <button className="icon-btn" title="Rename" onClick={() => void onRenameDoc(d)}>
-              <Pencil size={13} />
-            </button>
-            <button className="icon-btn" title="Delete" onClick={() => void onDeleteDoc(d, p)}>
-              <Trash2 size={13} />
-            </button>
-          </div>
+      <div
+        key={d.id}
+        className={cn(
+          'group flex items-center gap-1 rounded-md pr-1 transition-colors',
+          active ? 'bg-primary/15' : 'hover:bg-sidebar-accent',
         )}
+      >
+        <Link
+          to={docPath(p.slug, folderSlug, d.slug)}
+          onClick={onCloseDrawer}
+          className={cn(
+            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+            active ? 'font-medium text-foreground' : 'text-sidebar-foreground',
+          )}
+        >
+          <Icon className={cn('size-3.75 shrink-0', active ? 'text-primary' : 'text-muted-foreground')} />
+          <span className="min-w-0 flex-1 truncate">{docLabel(d)}</span>
+        </Link>
+        {editable && <ActionsMenu actions={menu} />}
       </div>
     )
   }
 
-  const renderProjectContents = (p: Project, editable: boolean) => {
+  // ---- project tree ----
+  const renderTree = (p: Project, editable: boolean) => {
     const projectFolders = folders.filter((f) => f.project_id === p.id)
-    const rootDocs = documents.filter((d) => d.project_id === p.id && !d.folder_id)
+    // Quick notes live in their own sidebar section (and /notes), not the project tree.
+    const rootDocs = documents.filter((d) => d.project_id === p.id && !d.folder_id && !d.is_quick_note)
     const empty = projectFolders.length === 0 && rootDocs.length === 0
     return (
       <>
         {projectFolders.map((f) => {
           const isCollapsed = collapsed.has(f.id)
           const folderDocs = documents.filter((d) => d.folder_id === f.id)
+          const folderActive = activeFolder?.id === f.id
+          const menu: MenuAction[] = [
+            { label: 'New document', icon: <FilePlus />, onSelect: () => void onCreateDoc(p, f.id) },
+            { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editFolder(f) },
+            { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => void onDeleteFolder(p, f.id, f) },
+          ]
           return (
-            <div key={f.id} className="folder-block">
-              <div className="folder-row">
-                <button className="folder-toggle" onClick={() => toggleCollapse(f.id)}>
-                  {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                  <FolderIcon size={15} className="row-icon" />
-                  <span className="row-label">{f.name}</span>
-                </button>
-                {editable && (
-                  <div className="row-actions">
-                    <button className="icon-btn" title="New document" onClick={() => void onCreateDoc(p, f.id)}>
-                      <FilePlus size={13} />
-                    </button>
-                    <button className="icon-btn" title="Rename" onClick={() => void onRenameFolder(f)}>
-                      <Pencil size={13} />
-                    </button>
-                    <button className="icon-btn" title="Delete" onClick={() => void onDeleteFolder(f)}>
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+            <div key={f.id}>
+              <div
+                className={cn(
+                  'group flex items-center gap-0.5 rounded-md pr-1 transition-colors',
+                  folderActive ? 'bg-primary/15' : 'hover:bg-sidebar-accent',
                 )}
+              >
+                <button
+                  className="ml-1 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                  onClick={() => collapse(f.id, !isCollapsed)}
+                  aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+                >
+                  {isCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                </button>
+                <Link
+                  to={folderPath(p.slug, f.slug)}
+                  // Clicking a collapsed folder reveals its contents as well as opening it.
+                  onClick={() => {
+                    collapse(f.id, false)
+                    onCloseDrawer()
+                  }}
+                  className={cn(
+                    'flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-1 text-sm',
+                    folderActive ? 'font-medium text-foreground' : 'text-sidebar-foreground',
+                  )}
+                >
+                  <FolderGlyph className={cn('size-3.75 shrink-0', folderActive ? 'text-primary' : 'text-muted-foreground')} />
+                  <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                </Link>
+                {editable && <ActionsMenu actions={menu} />}
               </div>
               {!isCollapsed && (
-                <div className="folder-children">
-                  {folderDocs.map((d) => docRow(d, p, editable))}
-                  {folderDocs.length === 0 && <div className="tree-empty-sm">empty</div>}
+                <div className="my-0.5 ml-4 border-l border-sidebar-border pl-1">
+                  {folderDocs.map((d) => docRow(d, p, editable, f.slug))}
+                  {folderDocs.length === 0 && (
+                    <div className="px-2 py-1 pl-7 text-xs text-muted-foreground italic">empty</div>
+                  )}
                 </div>
               )}
             </div>
           )
         })}
-        {rootDocs.map((d) => docRow(d, p, editable))}
-        {empty && <div className="tree-empty">No documents yet</div>}
+        {rootDocs.map((d) => docRow(d, p, editable, null))}
+        {empty && (
+          <div className="px-3 py-3 text-center text-sm text-muted-foreground">No documents yet</div>
+        )}
       </>
     )
   }
 
+  const projectMenu = (p: Project): MenuAction[] => [
+    ...(canEdit
+      ? ([
+          { label: 'New folder', icon: <FolderPlus />, onSelect: () => void actions.newFolder(p) },
+          { label: 'New document', icon: <FilePlus />, onSelect: () => void onCreateDoc(p, null) },
+        ] as MenuAction[])
+      : []),
+    ...(canConfigure
+      ? ([
+          { label: 'Rename', icon: <Pencil />, separatorBefore: canEdit, onSelect: () => void actions.editProject(p) },
+          { label: 'Settings', icon: <Settings />, onSelect: () => navigate(projectSettingsPath(p.slug)) },
+          { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => void onDeleteProject(p) },
+        ] as MenuAction[])
+      : []),
+  ]
+
   return (
-    <aside className={`sidebar ${drawerOpen ? 'open' : ''}`}>
-      <div className="sidebar-header">
-        <Link
-          to="/"
-          className="brand"
-          onClick={() => {
-            setSelectedProjectId(null)
-            onCloseDrawer()
-          }}
-        >
-          Claudia
+    <aside
+      className={cn(
+        'flex h-full w-72 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground',
+        'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl max-md:transition-transform max-md:duration-200',
+        drawerOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
+      )}
+    >
+      <div className="flex h-13 shrink-0 items-center px-4">
+        <Link to="/" className="text-lg font-bold tracking-tight" onClick={onCloseDrawer}>
+          {APP_NAME}
         </Link>
-        <button className="icon-btn" onClick={toggle} title="Toggle theme" aria-label="Toggle theme">
-          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
       </div>
 
-      <nav className="tree">
-        {selectedProject ? (
+      <nav className="flex-1 overflow-y-auto px-2 pb-6">
+        {proj ? (
           <>
-            <div className="project-head">
-              <button className="back-row" onClick={() => setSelectedProjectId(null)}>
-                <ChevronLeft size={14} />
-                <span>All projects</span>
-              </button>
-              <div className="row-actions">
-                {canEdit(selectedProject) && (
+            <div className="group mb-1 flex items-center gap-1 px-1">
+              <Link
+                to={projectPath(proj.slug)}
+                onClick={onCloseDrawer}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-sm font-bold tracking-tight hover:bg-sidebar-accent"
+              >
+                <ProjectGlyph project={proj} visibility={visOf(proj)} className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{proj.name}</span>
+              </Link>
+              <ActionsMenu actions={projectMenu(proj)} />
+            </div>
+            {renderTree(proj, canEdit)}
+
+            {proj.is_workspace && (
+              <div className="mt-5">
+                <div className="mb-1 flex items-center gap-1 pr-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Link
+                        to={notesPath(proj.slug)}
+                        onClick={onCloseDrawer}
+                        aria-label="All quick notes"
+                        className="group flex flex-1 items-center justify-between gap-1 rounded-md px-1.5 py-1 hover:bg-sidebar-accent"
+                      >
+                        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase group-hover:text-foreground">
+                          Quick notes
+                        </span>
+                        <ArrowRight className="size-3.5 text-muted-foreground group-hover:text-foreground" />
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent>All quick notes</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => void onNewQuickNote(proj)}
+                        aria-label="New quick note"
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm shadow-primary/20 transition-colors hover:bg-primary/90"
+                      >
+                        <Plus className="size-4.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>New quick note</TooltipContent>
+                  </Tooltip>
+                </div>
+                {quickNotes.length === 0 ? (
+                  <div className="px-3 py-2 text-center text-xs text-muted-foreground">No quick notes yet</div>
+                ) : (
                   <>
-                    <button className="icon-btn" title="New folder" onClick={() => void onCreateFolder(selectedProject)}>
-                      <FolderPlus size={14} />
-                    </button>
-                    <button className="icon-btn" title="New document" onClick={() => void onCreateDoc(selectedProject, null)}>
-                      <FilePlus size={14} />
-                    </button>
-                  </>
-                )}
-                {canManage(selectedProject) && (
-                  <>
-                    <button className="icon-btn" title="Rename project" onClick={() => void onRenameProject(selectedProject)}>
-                      <Pencil size={14} />
-                    </button>
-                    <button className="icon-btn" title="Delete project" onClick={() => void onDeleteProject(selectedProject)}>
-                      <Trash2 size={14} />
-                    </button>
-                    <button className="icon-btn" title="Share" onClick={() => setSettingsOpen(true)}>
-                      <Settings size={14} />
-                    </button>
+                    {quickNotes.slice(0, 4).map((n) => {
+                      const active = activeNoteId === n.slug
+                      return (
+                        <Link
+                          key={n.id}
+                          to={notePath(proj.slug, n.slug)}
+                          onClick={onCloseDrawer}
+                          className={cn(
+                            'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                            active
+                              ? 'bg-primary/15 font-medium text-foreground'
+                              : 'text-sidebar-foreground hover:bg-sidebar-accent',
+                          )}
+                        >
+                          <QuickNoteIcon className={cn('size-3.75 shrink-0', active ? 'text-primary' : 'text-muted-foreground')} />
+                          <span className="min-w-0 flex-1 truncate">{docLabel(n)}</span>
+                        </Link>
+                      )
+                    })}
+                    {quickNotes.length > 4 && (
+                      <Link
+                        to={notesPath(proj.slug)}
+                        onClick={onCloseDrawer}
+                        className="mt-0.5 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                      >
+                        Show all {quickNotes.length} <ArrowRight className="size-3" />
+                      </Link>
+                    )}
                   </>
                 )}
               </div>
-            </div>
-            <div className="project-current">
-              <VisibilityIcon v={visOf(selectedProject)} size={14} />
-              <span className="row-label">{selectedProject.name}</span>
-            </div>
-            {renderProjectContents(selectedProject, canEdit(selectedProject))}
-          </>
-        ) : (
-          <>
-            {projects.length === 0 && <div className="tree-empty">No projects yet</div>}
-            {projects.map((p) => (
-              <div key={p.id} className="project-row">
-                <button className="project-open" onClick={() => setSelectedProjectId(p.id)}>
-                  <FolderIcon size={15} className="row-icon" />
-                  <span className="row-label">{p.name}</span>
-                  <span className="vis-mini" title={visOf(p)}>
-                    <VisibilityIcon v={visOf(p)} />
-                  </span>
-                  <ChevronRight size={14} className="project-chevron" />
-                </button>
-                {canManage(p) && (
-                  <div className="row-actions">
-                    <button className="icon-btn" title="Rename" onClick={() => void onRenameProject(p)}>
-                      <Pencil size={13} />
-                    </button>
-                    <button className="icon-btn" title="Delete" onClick={() => void onDeleteProject(p)}>
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {user && (
-              <button className="add-row" onClick={() => void onCreateProject()}>
-                <Plus size={15} />
-                <span>New project</span>
-              </button>
             )}
           </>
+        ) : (
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {user ? 'Select a project from the dashboard.' : 'Sign in to see your workspace.'}
+          </div>
         )}
       </nav>
 
-      <div className="account">
+      {user && (
+        <div className="shrink-0 border-t border-sidebar-border p-2">
+          <Button variant="outline" className="w-full justify-start" onClick={() => void onCreateProject()}>
+            <Plus /> New project
+          </Button>
+        </div>
+      )}
+
+      <div className="shrink-0 border-t border-sidebar-border p-2">
         {user ? (
-          <div className="account-info">
-            <div className="account-name" title={user.email ?? undefined}>
-              {user.name || user.email || 'Account'}
+          <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="min-w-0 truncate text-sm font-medium" title={user.email ?? undefined}>
+                {user.name || user.email || 'Account'}
+              </span>
+              {role === 'admin' && <Badge variant="destructive">A</Badge>}
+              {role === 'mod' && <Badge>MOD</Badge>}
             </div>
-            <div className="account-meta">
-              <span className={`role-badge role-${role}`}>{role}</span>
-              {isAdmin && (
-                <Link to="/admin/users" className="admin-link" onClick={onCloseDrawer}>
-                  Users
-                </Link>
-              )}
-              <button className="link-btn" onClick={() => void logout()}>
-                Sign out
-              </button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-7 shrink-0 text-muted-foreground" aria-label="Account menu">
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="top">
+                <DropdownMenuItem onSelect={() => { onCloseDrawer(); navigate('/profile') }}>
+                  <User /> Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); toggle() }}>
+                  {theme === 'dark' ? <Sun /> : <Moon />}
+                  {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => void onSignOut()}>
+                  <LogOut /> Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         ) : (
-          <button className="btn btn-primary btn-sm" onClick={() => setShowLogin(true)}>
-            Sign in
-          </button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" className="flex-1" onClick={() => setShowLogin(true)}>
+              Sign in
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9 shrink-0 text-muted-foreground"
+              onClick={toggle}
+              aria-label="Toggle theme"
+            >
+              {theme === 'dark' ? <Sun /> : <Moon />}
+            </Button>
+          </div>
         )}
       </div>
 
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
-      {settingsOpen && selectedProject && (
-        <ProjectSettings
-          project={selectedProject}
-          onClose={() => setSettingsOpen(false)}
-          onSaved={() => void refresh()}
-        />
-      )}
     </aside>
   )
 }

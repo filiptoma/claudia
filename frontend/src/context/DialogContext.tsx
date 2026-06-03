@@ -1,6 +1,12 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import Modal from '../components/Modal'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface PromptOpts {
   title: string
@@ -28,9 +34,67 @@ type State =
   | { kind: 'confirm'; opts: ConfirmOpts }
   | null
 
+const PROMPT_FORM_ID = 'claudia-prompt-form'
+
+// Self-contained so each prompt gets a fresh react-hook-form instance (no manual reset needed).
+function PromptDialog({
+  opts,
+  onCancel,
+  onSubmit,
+}: {
+  opts: PromptOpts
+  onCancel: () => void
+  onSubmit: (value: string) => void
+}) {
+  const schema = z.object({
+    value: z.string().trim().min(1, `${opts.label ?? 'This field'} is required`),
+  })
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<{ value: string }>({
+    resolver: zodResolver(schema),
+    defaultValues: { value: opts.defaultValue ?? '' },
+  })
+
+  return (
+    <Modal
+      title={opts.title}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" form={PROMPT_FORM_ID}>
+            {opts.confirmText ?? 'OK'}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={PROMPT_FORM_ID}
+        className="flex flex-col gap-2"
+        onSubmit={handleSubmit(({ value }) => onSubmit(value.trim()))}
+        noValidate
+      >
+        {opts.label && <Label htmlFor="claudia-prompt-input">{opts.label}</Label>}
+        <Input
+          id="claudia-prompt-input"
+          autoFocus
+          placeholder={opts.placeholder}
+          aria-invalid={!!errors.value}
+          {...register('value')}
+        />
+        {errors.value && <p className="text-xs text-destructive">{errors.value.message}</p>}
+      </form>
+    </Modal>
+  )
+}
+
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>(null)
-  const [value, setValue] = useState('')
   const resolver = useRef<((v: string | null | boolean) => void) | null>(null)
 
   const settle = useCallback((result: string | null | boolean) => {
@@ -40,7 +104,6 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const prompt = useCallback((o: PromptOpts) => {
-    setValue(o.defaultValue ?? '')
     setState({ kind: 'prompt', opts: o })
     return new Promise<string | null>((res) => {
       resolver.current = res as (v: string | null | boolean) => void
@@ -59,39 +122,11 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       {children}
 
       {state?.kind === 'prompt' && (
-        <Modal
-          title={state.opts.title}
-          onClose={() => settle(null)}
-          footer={
-            <>
-              <button className="btn" onClick={() => settle(null)}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => settle(value.trim() || null)}
-              >
-                {state.opts.confirmText ?? 'OK'}
-              </button>
-            </>
-          }
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              settle(value.trim() || null)
-            }}
-          >
-            {state.opts.label && <label className="field-label">{state.opts.label}</label>}
-            <input
-              className="text-input"
-              autoFocus
-              placeholder={state.opts.placeholder}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          </form>
-        </Modal>
+        <PromptDialog
+          opts={state.opts}
+          onCancel={() => settle(null)}
+          onSubmit={(value) => settle(value)}
+        />
       )}
 
       {state?.kind === 'confirm' && (
@@ -100,19 +135,19 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           onClose={() => settle(false)}
           footer={
             <>
-              <button className="btn" onClick={() => settle(false)}>
+              <Button variant="outline" onClick={() => settle(false)}>
                 Cancel
-              </button>
-              <button
-                className={`btn ${state.opts.danger ? 'btn-danger' : 'btn-primary'}`}
+              </Button>
+              <Button
+                variant={state.opts.danger ? 'destructive' : 'default'}
                 onClick={() => settle(true)}
               >
                 {state.opts.confirmText ?? 'Confirm'}
-              </button>
+              </Button>
             </>
           }
         >
-          <p className="confirm-msg">{state.opts.message}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{state.opts.message}</p>
         </Modal>
       )}
     </Ctx.Provider>

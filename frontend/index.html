@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>Claudia</title>
+    <title>AstroNote</title>
     <!-- Set theme before first paint to avoid a flash of the wrong theme. -->
     <script>
       (function () {
@@ -14,9 +14,9 @@
           if (t !== 'light' && t !== 'dark') {
             t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
           }
-          document.documentElement.setAttribute('data-theme', t)
+          document.documentElement.classList.toggle('dark', t === 'dark')
         } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light')
+          /* default to light */
         }
       })()
     </script>

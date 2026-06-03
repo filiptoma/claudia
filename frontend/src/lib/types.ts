@@ -16,6 +16,7 @@ export interface Project {
   slug: string
   owner: string | null
   is_public: boolean
+  is_workspace: boolean
   sort_order: number
   created_at: string
   updated_at: string
@@ -43,6 +44,8 @@ export interface DocumentRec {
   project_id: string
   folder_id: string | null
   content: string
+  /** A quick note has no title and a short nanoid slug; it lives at the workspace root. */
+  is_quick_note: boolean
   sort_order: number
   created_at: string
   updated_at: string

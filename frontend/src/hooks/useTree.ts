@@ -3,7 +3,18 @@ import { supabase } from '../lib/supabase'
 import { extractStoragePaths, signImages } from '../lib/storage'
 import type { DocumentRec, Folder, Project, ProjectMember } from '../lib/types'
 
-export type DocMeta = Pick<DocumentRec, 'id' | 'title' | 'slug' | 'project_id' | 'folder_id' | 'sort_order'>
+export type DocMeta = Pick<
+  DocumentRec,
+  | 'id'
+  | 'title'
+  | 'slug'
+  | 'project_id'
+  | 'folder_id'
+  | 'sort_order'
+  | 'is_quick_note'
+  | 'created_at'
+  | 'updated_at'
+>
 
 export const treeKeys = {
   projects: ['projects'] as const,
@@ -19,6 +30,10 @@ export async function fetchDocument(id: string): Promise<DocumentRec> {
   return data as DocumentRec
 }
 
+// Tree lists are cached (staleTime) and kept fresh by explicit invalidation after every CRUD
+// (see refresh()), so navigating between pages doesn't refetch them on every mount.
+const TREE_STALE = 5 * 60 * 1000
+
 // Projects + folders + document metadata + the membership rows the user is allowed to see.
 // RLS filters all of these, so a user only ever gets back what they're permitted to read.
 export function useTree() {
@@ -26,6 +41,7 @@ export function useTree() {
 
   const projects = useQuery({
     queryKey: treeKeys.projects,
+    staleTime: TREE_STALE,
     queryFn: async () => {
       const { data, error } = await supabase.from('projects').select('*').order('sort_order').order('name')
       if (error) throw new Error(error.message)
@@ -34,6 +50,7 @@ export function useTree() {
   })
   const folders = useQuery({
     queryKey: treeKeys.folders,
+    staleTime: TREE_STALE,
     queryFn: async () => {
       const { data, error } = await supabase.from('folders').select('*').order('sort_order').order('name')
       if (error) throw new Error(error.message)
@@ -42,10 +59,11 @@ export function useTree() {
   })
   const documents = useQuery({
     queryKey: treeKeys.documents,
+    staleTime: TREE_STALE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('documents')
-        .select('id,title,slug,project_id,folder_id,sort_order')
+        .select('id,title,slug,project_id,folder_id,sort_order,is_quick_note,created_at,updated_at')
         .order('sort_order')
         .order('title')
       if (error) throw new Error(error.message)
@@ -54,6 +72,7 @@ export function useTree() {
   })
   const members = useQuery({
     queryKey: treeKeys.members,
+    staleTime: TREE_STALE,
     queryFn: async () => {
       const { data, error } = await supabase.from('project_members').select('*')
       if (error) throw new Error(error.message)
@@ -74,8 +93,10 @@ export function useTree() {
     folders: folders.data ?? [],
     documents: documents.data ?? [],
     members: members.data ?? [],
-    loading: projects.isPending || folders.isPending || documents.isPending,
+    loading: projects.isPending || folders.isPending || documents.isPending || members.isPending,
     error: (projects.error || folders.error || documents.error || members.error) as Error | null,
+    // Raw query objects for <QuerySuspense> (loading/error gating per section).
+    queries: [projects, folders, documents, members],
     refresh,
   }
 }

@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Local env: real values live in .env.development / .env.production (gitignored).
+# Commit only the .env.example template.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

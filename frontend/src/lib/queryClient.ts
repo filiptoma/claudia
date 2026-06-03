@@ -1,11 +1,13 @@
 import { QueryClient } from '@tanstack/react-query'
 
-// Default staleTime is 0 — queries are always considered stale, so NOTHING is implicitly cached.
-// Data revalidates on mount / refocus / invalidation. Caching is opt-in PER ENDPOINT via an
-// explicit `staleTime` on the individual useQuery call, so it is always clear what is cached:
+// Default staleTime is 0; caching is opt-in PER ENDPOINT via an explicit `staleTime` on the
+// individual useQuery call, and kept correct by invalidation after CRUD (useTreeActions.refresh)
+// and on auth change (AuthContext). What's cached:
 //
-//   • tree lists  ['projects'] / ['folders'] / ['documents']  -> staleTime 0  (revalidate; reflect live CRUD)
-//   • document    ['document', id]                            -> staleTime 5m (cached; see useDocument)
+//   • tree lists ['projects']/['folders']/['documents']/['members'] -> staleTime 5m (see useTree)
+//   • document   ['document', id]                                   -> staleTime 5m (see useDocument)
+//   • admin      ['admin','profiles']                               -> staleTime 1m (see AdminUsers)
+//   • signed images ['signed-images', …]                           -> staleTime 50m (see useSignedImages)
 //
 export const queryClient = new QueryClient({
   defaultOptions: {

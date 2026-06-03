@@ -11,8 +11,9 @@ interface ThemeCtx {
 const Ctx = createContext<ThemeCtx | null>(null)
 
 function initialTheme(): Theme {
-  const attr = document.documentElement.getAttribute('data-theme')
-  if (attr === 'light' || attr === 'dark') return attr
+  if (document.documentElement.classList.contains('dark')) return 'dark'
+  const stored = localStorage.getItem('claudia-theme')
+  if (stored === 'light' || stored === 'dark') return stored
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
@@ -20,7 +21,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(initialTheme)
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
+    document.documentElement.classList.toggle('dark', theme === 'dark')
     try {
       localStorage.setItem('claudia-theme', theme)
     } catch {

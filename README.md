@@ -37,21 +37,21 @@ in a project you can't access is genuinely unreachable.
 ```
 claudia/
   frontend/                 # Vite + React + TypeScript app
-  supabase/migrations/      # 0001_init.sql (schema + RLS + storage) · 0002_sharing_rpcs.sql
+  supabase/migrations/      # 0001_init.sql (schema + RLS + storage) … 0007_*.sql
   SUPABASE-SETUP.md         # one-time hosted-backend setup
   RUN.md                    # run & build
 ```
 
 ## Quick start
 
-1. **Backend:** follow [SUPABASE-SETUP.md](SUPABASE-SETUP.md) — create a project, run the two SQL
-   files, configure auth, grab your API keys.
+1. **Backend:** follow [SUPABASE-SETUP.md](SUPABASE-SETUP.md) — create a project, run the migrations
+   `0001`–`0007` in order, configure auth, grab your API keys.
 2. **Frontend:**
    ```bash
    cd frontend
-   cp .env.example .env      # fill VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+   cp .env.example .env.development   # fill VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY
    npm install
-   npm run dev               # http://127.0.0.1:5173
+   npm run dev                        # http://127.0.0.1:5173
    ```
 3. **Make yourself admin:** sign up, then in Supabase SQL editor:
    `update public.profiles set role = 'admin' where email = 'you@example.com';` — and sign in again.
@@ -63,5 +63,9 @@ See [RUN.md](RUN.md) for build/deploy details.
 - **Backend:** the hosted Supabase project (apply the migrations, enable auth providers, set
   redirect URLs).
 - **Frontend:** `npm run build` → deploy `frontend/dist/` to **Cloudflare Pages** (root `frontend`,
-  output `dist`), set the two `VITE_SUPABASE_*` env vars, and add your Pages origin to Supabase →
-  Authentication → URL Configuration. SPA fallback: [`frontend/public/_redirects`](frontend/public/_redirects).
+  output `dist`), set the two `VITE_SUPABASE_*` env vars (`VITE_SUPABASE_URL` +
+  `VITE_SUPABASE_PUBLISHABLE_KEY`), and add your Pages origin to Supabase → Authentication → URL
+  Configuration. SPA fallback: [`frontend/public/_redirects`](frontend/public/_redirects).
+
+> **dev + prod:** see [GO-TO-PROD.md](GO-TO-PROD.md) for the two-project (dev/prod) setup, local DB
+> switching (`npm run dev` = dev, `npm run dev:live`/`build` = prod), and the go-live checklist.
