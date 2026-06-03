@@ -250,8 +250,8 @@ export default function Sidebar({
       <div className="flex h-13 shrink-0 items-center px-4">
         <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight" onClick={onCloseDrawer}>
           {/* black logo on light theme, white on dark (.dark on <html>) */}
-          <img src={astroLogoBlack} alt="" aria-hidden className="size-6 dark:hidden" />
-          <img src={astroLogoWhite} alt="" aria-hidden className="hidden size-6 dark:block" />
+          <img src={astroLogoBlack} alt="" aria-hidden className="size-8 dark:hidden" />
+          <img src={astroLogoWhite} alt="" aria-hidden className="hidden size-8 dark:block" />
           {APP_NAME}
         </Link>
       </div>
