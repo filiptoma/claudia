@@ -8,11 +8,9 @@ frontend/dist/
 .env
 .env.local
 
-# local Claude Code settings (personal permission grants)
-.claude/settings.local.json
+# Claude Code local config (permission grants, scheduled-task locks, etc.)
+.claude/
 
 # misc
 .DS_Store
 *.log
-
-.claude/**
