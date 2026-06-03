@@ -29,6 +29,9 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<'login' | 'register'>('login')
   const [busy, setBusy] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
+  // Set to the email address once a verification email has been sent (swaps the modal to a
+  // "check your email" confirmation view instead of closing).
+  const [verifySentTo, setVerifySentTo] = useState<string | null>(null)
 
   const {
     register,
@@ -57,16 +60,54 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const onSubmit = (values: FormValues) =>
-    void run(async () => {
-      if (tab === 'login') {
+  const onSubmit = (values: FormValues) => {
+    if (tab === 'login') {
+      void run(async () => {
         await loginEmail(values.email, values.password)
         toast('success', 'Signed in')
-      } else {
-        await registerUser({ email: values.email, password: values.password, name: values.name ?? '' })
-        toast('success', 'Account created')
+      })
+      return
+    }
+    // Register: if the project requires email confirmation, keep the modal open and switch it to a
+    // "check your email" view (plus a toast). Otherwise (auto-signed-in) just close.
+    setBusy(true)
+    setServerError(null)
+    void (async () => {
+      try {
+        const { needsConfirmation } = await registerUser({
+          email: values.email,
+          password: values.password,
+          name: values.name ?? '',
+        })
+        if (needsConfirmation) {
+          toast('success', 'Verification email sent — check your inbox to confirm your account.')
+          setVerifySentTo(values.email)
+        } else {
+          toast('success', 'Account created')
+          onClose()
+        }
+      } catch (e) {
+        setServerError(e instanceof Error ? e.message : 'Something went wrong')
+      } finally {
+        setBusy(false)
       }
-    })
+    })()
+  }
+
+  if (verifySentTo) {
+    return (
+      <Modal title="Check your email" onClose={onClose}>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            We sent a verification link to{' '}
+            <span className="font-medium text-foreground">{verifySentTo}</span>. Click it to activate
+            your account, then sign in.
+          </p>
+          <Button onClick={onClose}>Got it</Button>
+        </div>
+      </Modal>
+    )
+  }
 
   return (
     <Modal title={tab === 'login' ? 'Welcome back' : 'Create your account'} onClose={onClose}>

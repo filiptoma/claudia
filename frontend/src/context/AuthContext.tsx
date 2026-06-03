@@ -15,7 +15,7 @@ interface AuthCtx {
   loading: boolean
   loginEmail: (email: string, password: string) => Promise<void>
   loginOAuth: (provider: 'google' | 'github') => Promise<void>
-  register: (data: { email: string; password: string; name: string }) => Promise<void>
+  register: (data: { email: string; password: string; name: string }) => Promise<{ needsConfirmation: boolean }>
   logout: () => Promise<void>
 }
 
@@ -97,12 +97,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw new Error(error.message)
       },
       async register({ email, password, name }) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { name }, emailRedirectTo: window.location.origin },
         })
         if (error) throw new Error(error.message)
+        // When email confirmation is required, signUp returns no session until the link is clicked.
+        return { needsConfirmation: !data.session }
       },
       async logout() {
         await supabase.auth.signOut()
