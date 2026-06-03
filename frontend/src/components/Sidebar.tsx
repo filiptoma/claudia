@@ -31,6 +31,8 @@ import { canConfigureProject, canEditProject, projectVisibility } from '../lib/a
 import { docPath, docSplitPath, folderPath, notePath, notesPath, noteSplitPath, projectPath, projectSettingsPath } from '../lib/paths'
 import { docLabel } from '../lib/labels'
 import { APP_NAME } from '../lib/brand'
+import astroLogoBlack from '../assets/astro-black.svg'
+import astroLogoWhite from '../assets/astro-white.svg'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -246,7 +248,10 @@ export default function Sidebar({
       )}
     >
       <div className="flex h-13 shrink-0 items-center px-4">
-        <Link to="/" className="text-lg font-bold tracking-tight" onClick={onCloseDrawer}>
+        <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight" onClick={onCloseDrawer}>
+          {/* black logo on light theme, white on dark (.dark on <html>) */}
+          <img src={astroLogoBlack} alt="" aria-hidden className="size-6 dark:hidden" />
+          <img src={astroLogoWhite} alt="" aria-hidden className="hidden size-6 dark:block" />
           {APP_NAME}
         </Link>
       </div>
