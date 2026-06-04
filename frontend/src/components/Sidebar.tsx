@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowRight,
   ChevronDown,
@@ -15,191 +15,274 @@ import {
   Sun,
   Trash2,
   User,
-} from 'lucide-react'
-import LoginModal from './LoginModal'
-import ActionsMenu from './ActionsMenu'
-import type { MenuAction } from './ActionsMenu'
-import { DocIcon, FolderGlyph, ProjectGlyph, QuickNoteIcon } from './EntityIcons'
-import { useAuth } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
-import { useTree } from '../hooks/useTree'
-import type { DocMeta } from '../hooks/useTree'
-import { useTreeActions } from '../hooks/useTreeActions'
-import { useRouteContext } from '../hooks/useRouteContext'
-import { useQuickNotes } from '../hooks/useQuickNotes'
-import { canConfigureProject, canEditProject, projectVisibility } from '../lib/access'
-import { docPath, docSplitPath, folderPath, notePath, notesPath, noteSplitPath, projectPath, projectSettingsPath } from '../lib/paths'
-import { docLabel } from '../lib/labels'
-import { APP_NAME } from '../lib/brand'
-import astroLogoBlack from '../assets/astro-black.svg'
-import astroLogoWhite from '../assets/astro-white.svg'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+} from "lucide-react";
+import LoginModal from "./LoginModal";
+import ActionsMenu from "./ActionsMenu";
+import type { MenuAction } from "./ActionsMenu";
+import {
+  DocIcon,
+  FolderGlyph,
+  ProjectGlyph,
+  QuickNoteIcon,
+} from "./EntityIcons";
+import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
+import { useTree } from "../hooks/useTree";
+import type { DocMeta } from "../hooks/useTree";
+import { useTreeActions } from "../hooks/useTreeActions";
+import { useRouteContext } from "../hooks/useRouteContext";
+import { useQuickNotes } from "../hooks/useQuickNotes";
+import {
+  canConfigureProject,
+  canEditProject,
+  projectVisibility,
+} from "../lib/access";
+import {
+  docPath,
+  docSplitPath,
+  folderPath,
+  notePath,
+  notesPath,
+  noteSplitPath,
+  projectPath,
+  projectSettingsPath,
+} from "../lib/paths";
+import { docLabel } from "../lib/labels";
+import { APP_NAME } from "../lib/brand";
+import astroLogoBlack from "../assets/astro-black.svg";
+import astroLogoWhite from "../assets/astro-white.svg";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
-import type { MemberRole, Project, Visibility } from '../lib/types'
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import type { MemberRole, Project, Visibility } from "../lib/types";
 
 export default function Sidebar({
   drawerOpen,
   onCloseDrawer,
 }: {
-  drawerOpen: boolean
-  onCloseDrawer: () => void
+  drawerOpen: boolean;
+  onCloseDrawer: () => void;
 }) {
-  const { currentProject, folder: activeFolder, doc: activeDoc } = useRouteContext()
-  const { user, uid, role, logout } = useAuth()
-  const { theme, toggle } = useTheme()
-  const { folders, documents, members, refresh } = useTree()
-  const { notes: quickNotes } = useQuickNotes()
-  const { id: activeNoteId } = useParams()
-  const actions = useTreeActions()
-  const navigate = useNavigate()
+  const {
+    currentProject,
+    folder: activeFolder,
+    doc: activeDoc,
+  } = useRouteContext();
+  const { user, uid, role, logout } = useAuth();
+  const { theme, toggle } = useTheme();
+  const { folders, documents, members, refresh } = useTree();
+  const { notes: quickNotes } = useQuickNotes();
+  const { id: activeNoteId } = useParams();
+  const actions = useTreeActions();
+  const navigate = useNavigate();
 
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const [showLogin, setShowLogin] = useState(false)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [showLogin, setShowLogin] = useState(false);
 
-  const proj = currentProject
+  const proj = currentProject;
   const myRole = useMemo(() => {
-    const m = new Map<string, MemberRole>()
-    for (const x of members) if (x.user_id === uid) m.set(x.project_id, x.role)
-    return m
-  }, [members, uid])
-  const memberCount = (id: string) => members.filter((m) => m.project_id === id).length
-  const canEdit = proj ? canEditProject(proj, role, uid, myRole.get(proj.id)) : false
-  const canConfigure = proj ? canConfigureProject(proj, role, uid) : false
-  const visOf = (p: Project): Visibility => projectVisibility(p, memberCount(p.id))
+    const m = new Map<string, MemberRole>();
+    for (const x of members) if (x.user_id === uid) m.set(x.project_id, x.role);
+    return m;
+  }, [members, uid]);
+  const memberCount = (id: string) =>
+    members.filter((m) => m.project_id === id).length;
+  const canEdit = proj
+    ? canEditProject(proj, role, uid, myRole.get(proj.id))
+    : false;
+  const canConfigure = proj ? canConfigureProject(proj, role, uid) : false;
+  const visOf = (p: Project): Visibility =>
+    projectVisibility(p, memberCount(p.id));
 
   const collapse = (id: string, value: boolean) =>
     setCollapsed((s) => {
-      if (s.has(id) === value) return s
-      const n = new Set(s)
-      if (value) n.add(id)
-      else n.delete(id)
-      return n
-    })
+      if (s.has(id) === value) return s;
+      const n = new Set(s);
+      if (value) n.add(id);
+      else n.delete(id);
+      return n;
+    });
 
   const onCreateProject = async () => {
-    const p = await actions.newProject()
+    const p = await actions.newProject();
     if (p) {
-      onCloseDrawer()
-      navigate(projectPath(p.slug))
+      onCloseDrawer();
+      navigate(projectPath(p.slug));
     }
-  }
+  };
   const onCreateDoc = async (p: Project, folderId: string | null) => {
-    const doc = await actions.newDocument(p, folderId)
+    const doc = await actions.newDocument(p, folderId);
     if (doc) {
-      onCloseDrawer()
-      navigate(docSplitPath(p.slug, doc, folders))
+      onCloseDrawer();
+      navigate(docSplitPath(p.slug, doc, folders));
     }
-  }
+  };
   const onNewQuickNote = async (p: Project) => {
-    const note = await actions.newQuickNote()
+    const note = await actions.newQuickNote();
     if (note) {
-      onCloseDrawer()
-      navigate(noteSplitPath(p.slug, note.slug))
+      onCloseDrawer();
+      navigate(noteSplitPath(p.slug, note.slug));
     }
-  }
-  const onDeleteFolder = async (p: Project, folderId: string, folderObj: Parameters<typeof actions.deleteFolder>[0]) => {
-    const wasActive = activeFolder?.id === folderId || documents.some((d) => d.folder_id === folderId && d.id === activeDoc?.id)
-    if (await actions.deleteFolder(folderObj) && wasActive) navigate(projectPath(p.slug))
-  }
+  };
+  const onDeleteFolder = async (
+    p: Project,
+    folderId: string,
+    folderObj: Parameters<typeof actions.deleteFolder>[0],
+  ) => {
+    const wasActive =
+      activeFolder?.id === folderId ||
+      documents.some((d) => d.folder_id === folderId && d.id === activeDoc?.id);
+    if ((await actions.deleteFolder(folderObj)) && wasActive)
+      navigate(projectPath(p.slug));
+  };
   const onDeleteDoc = async (p: Project, d: DocMeta) => {
-    if ((await actions.deleteDocument(d)) && activeDoc?.id === d.id) navigate(projectPath(p.slug))
-  }
+    if ((await actions.deleteDocument(d)) && activeDoc?.id === d.id)
+      navigate(projectPath(p.slug));
+  };
   const onDeleteProject = async (p: Project) => {
-    if (await actions.deleteProject(p)) navigate('/')
-  }
+    if (await actions.deleteProject(p)) navigate("/");
+  };
   const onSignOut = async () => {
-    await logout()
-    await refresh()
-    onCloseDrawer()
-    navigate('/')
-  }
+    await logout();
+    await refresh();
+    onCloseDrawer();
+    navigate("/");
+  };
 
   // ---- doc row ----
-  const docRow = (d: DocMeta, p: Project, editable: boolean, folderSlug: string | null) => {
-    const active = activeDoc?.id === d.id
-    const Icon = d.is_quick_note ? QuickNoteIcon : DocIcon
+  const docRow = (
+    d: DocMeta,
+    p: Project,
+    editable: boolean,
+    folderSlug: string | null,
+  ) => {
+    const active = activeDoc?.id === d.id;
+    const Icon = d.is_quick_note ? QuickNoteIcon : DocIcon;
     const menu: MenuAction[] = [
-      { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editDocument(d) },
-      { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => void onDeleteDoc(p, d) },
-    ]
+      {
+        label: "Rename",
+        icon: <Pencil />,
+        onSelect: () => void actions.editDocument(d),
+      },
+      {
+        label: "Delete",
+        icon: <Trash2 />,
+        danger: true,
+        onSelect: () => void onDeleteDoc(p, d),
+      },
+    ];
     return (
       <div
         key={d.id}
         className={cn(
-          'group flex items-center gap-1 rounded-md pr-1 transition-colors',
-          active ? 'bg-primary/15' : 'hover:bg-sidebar-accent',
+          "group flex items-center gap-1 rounded-md pr-1 transition-colors",
+          active ? "bg-primary/15" : "hover:bg-sidebar-accent",
         )}
       >
         <Link
           to={docPath(p.slug, folderSlug, d.slug)}
           onClick={onCloseDrawer}
           className={cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm',
-            active ? 'font-medium text-foreground' : 'text-sidebar-foreground',
+            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+            active ? "font-medium text-foreground" : "text-sidebar-foreground",
           )}
         >
-          <Icon className={cn('size-3.75 shrink-0', active ? 'text-primary' : 'text-muted-foreground')} />
+          <Icon
+            className={cn(
+              "size-3.75 shrink-0",
+              active ? "text-primary" : "text-muted-foreground",
+            )}
+          />
           <span className="min-w-0 flex-1 truncate">{docLabel(d)}</span>
         </Link>
         {editable && <ActionsMenu actions={menu} />}
       </div>
-    )
-  }
+    );
+  };
 
   // ---- project tree ----
   const renderTree = (p: Project, editable: boolean) => {
-    const projectFolders = folders.filter((f) => f.project_id === p.id)
+    const projectFolders = folders.filter((f) => f.project_id === p.id);
     // Quick notes live in their own sidebar section (and /notes), not the project tree.
-    const rootDocs = documents.filter((d) => d.project_id === p.id && !d.folder_id && !d.is_quick_note)
-    const empty = projectFolders.length === 0 && rootDocs.length === 0
+    const rootDocs = documents.filter(
+      (d) => d.project_id === p.id && !d.folder_id && !d.is_quick_note,
+    );
+    const empty = projectFolders.length === 0 && rootDocs.length === 0;
     return (
       <>
         {projectFolders.map((f) => {
-          const isCollapsed = collapsed.has(f.id)
-          const folderDocs = documents.filter((d) => d.folder_id === f.id)
-          const folderActive = activeFolder?.id === f.id
+          const isCollapsed = collapsed.has(f.id);
+          const folderDocs = documents.filter((d) => d.folder_id === f.id);
+          const folderActive = activeFolder?.id === f.id;
           const menu: MenuAction[] = [
-            { label: 'New document', icon: <FilePlus />, onSelect: () => void onCreateDoc(p, f.id) },
-            { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editFolder(f) },
-            { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => void onDeleteFolder(p, f.id, f) },
-          ]
+            {
+              label: "New document",
+              icon: <FilePlus />,
+              onSelect: () => void onCreateDoc(p, f.id),
+            },
+            {
+              label: "Rename",
+              icon: <Pencil />,
+              onSelect: () => void actions.editFolder(f),
+            },
+            {
+              label: "Delete",
+              icon: <Trash2 />,
+              danger: true,
+              onSelect: () => void onDeleteFolder(p, f.id, f),
+            },
+          ];
           return (
             <div key={f.id}>
               <div
                 className={cn(
-                  'group flex items-center gap-0.5 rounded-md pr-1 transition-colors',
-                  folderActive ? 'bg-primary/15' : 'hover:bg-sidebar-accent',
+                  "group flex items-center gap-0.5 rounded-md pr-1 transition-colors",
+                  folderActive ? "bg-primary/15" : "hover:bg-sidebar-accent",
                 )}
               >
                 <button
                   className="ml-1 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
                   onClick={() => collapse(f.id, !isCollapsed)}
-                  aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+                  aria-label={isCollapsed ? "Expand" : "Collapse"}
                 >
-                  {isCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                  {isCollapsed ? (
+                    <ChevronRight className="size-3.5" />
+                  ) : (
+                    <ChevronDown className="size-3.5" />
+                  )}
                 </button>
                 <Link
                   to={folderPath(p.slug, f.slug)}
                   // Clicking a collapsed folder reveals its contents as well as opening it.
                   onClick={() => {
-                    collapse(f.id, false)
-                    onCloseDrawer()
+                    collapse(f.id, false);
+                    onCloseDrawer();
                   }}
                   className={cn(
-                    'flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-1 text-sm',
-                    folderActive ? 'font-medium text-foreground' : 'text-sidebar-foreground',
+                    "flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-1 text-sm",
+                    folderActive
+                      ? "font-medium text-foreground"
+                      : "text-sidebar-foreground",
                   )}
                 >
-                  <FolderGlyph className={cn('size-3.75 shrink-0', folderActive ? 'text-primary' : 'text-muted-foreground')} />
+                  <FolderGlyph
+                    className={cn(
+                      "size-3.75 shrink-0",
+                      folderActive ? "text-primary" : "text-muted-foreground",
+                    )}
+                  />
                   <span className="min-w-0 flex-1 truncate">{f.name}</span>
                 </Link>
                 {editable && <ActionsMenu actions={menu} />}
@@ -208,65 +291,113 @@ export default function Sidebar({
                 <div className="my-0.5 ml-4 border-l border-sidebar-border pl-1">
                   {folderDocs.map((d) => docRow(d, p, editable, f.slug))}
                   {folderDocs.length === 0 && (
-                    <div className="px-2 py-1 pl-7 text-xs text-muted-foreground italic">empty</div>
+                    <div className="px-2 py-1 pl-7 text-xs text-muted-foreground italic">
+                      empty
+                    </div>
                   )}
                 </div>
               )}
             </div>
-          )
+          );
         })}
         {rootDocs.map((d) => docRow(d, p, editable, null))}
         {empty && (
-          <div className="px-3 py-3 text-center text-sm text-muted-foreground">No documents yet</div>
+          <div className="px-3 py-2 text-center text-xs text-muted-foreground">
+            No documents yet
+          </div>
         )}
       </>
-    )
-  }
+    );
+  };
 
   const projectMenu = (p: Project): MenuAction[] => [
     ...(canEdit
       ? ([
-          { label: 'New folder', icon: <FolderPlus />, onSelect: () => void actions.newFolder(p) },
-          { label: 'New document', icon: <FilePlus />, onSelect: () => void onCreateDoc(p, null) },
+          {
+            label: "New folder",
+            icon: <FolderPlus />,
+            onSelect: () => void actions.newFolder(p),
+          },
+          {
+            label: "New document",
+            icon: <FilePlus />,
+            onSelect: () => void onCreateDoc(p, null),
+          },
         ] as MenuAction[])
       : []),
     ...(canConfigure
       ? ([
-          { label: 'Rename', icon: <Pencil />, separatorBefore: canEdit, onSelect: () => void actions.editProject(p) },
-          { label: 'Settings', icon: <Settings />, onSelect: () => navigate(projectSettingsPath(p.slug)) },
-          { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => void onDeleteProject(p) },
+          {
+            label: "Rename",
+            icon: <Pencil />,
+            separatorBefore: canEdit,
+            onSelect: () => void actions.editProject(p),
+          },
+          {
+            label: "Settings",
+            icon: <Settings />,
+            onSelect: () => navigate(projectSettingsPath(p.slug)),
+          },
+          {
+            label: "Delete",
+            icon: <Trash2 />,
+            danger: true,
+            onSelect: () => void onDeleteProject(p),
+          },
         ] as MenuAction[])
       : []),
-  ]
+  ];
 
   return (
     <aside
       className={cn(
-        'flex h-full w-72 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground',
-        'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl max-md:transition-transform max-md:duration-200',
-        drawerOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
+        "flex h-full w-72 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl max-md:transition-transform max-md:duration-200",
+        drawerOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
       )}
     >
-      <div className="flex h-13 shrink-0 items-center px-4">
-        <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight" onClick={onCloseDrawer}>
+      <div className="flex h-13 shrink-0 items-center px-4 border-b border-sidebar-border">
+        <Link
+          to="/"
+          className="flex items-center gap-2 text-lg font-bold tracking-tight"
+          onClick={onCloseDrawer}
+        >
           {/* black logo on light theme, white on dark (.dark on <html>) */}
-          <img src={astroLogoBlack} alt="" aria-hidden className="size-8 dark:hidden" />
-          <img src={astroLogoWhite} alt="" aria-hidden className="hidden size-8 dark:block" />
+          <img
+            src={astroLogoBlack}
+            alt=""
+            aria-hidden
+            className="size-8 dark:hidden"
+          />
+          <img
+            src={astroLogoWhite}
+            alt=""
+            aria-hidden
+            className="hidden size-8 dark:block"
+          />
           {APP_NAME}
         </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 pb-6">
+      <nav className="flex-1 overflow-y-auto px-2 py-3">
         {proj ? (
           <>
             <div className="group mb-1 flex items-center gap-1 px-1">
               <Link
                 to={projectPath(proj.slug)}
                 onClick={onCloseDrawer}
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-sm font-bold tracking-tight hover:bg-sidebar-accent"
+                className={cn(
+                  "flex min-w-0 flex-1 items-center rounded-md px-1.5 py-1 text-sm font-bold tracking-tight hover:bg-sidebar-accent gap-2",
+                )}
               >
-                <ProjectGlyph project={proj} visibility={visOf(proj)} className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">{proj.name}</span>
+                <ProjectGlyph
+                  project={proj}
+                  visibility={visOf(proj)}
+                  className="size-4 shrink-0 text-muted-foreground"
+                />
+                <span className="min-w-0 flex-1 truncate text-base">
+                  {proj.name}
+                </span>
               </Link>
               <ActionsMenu actions={projectMenu(proj)} />
             </div>
@@ -281,7 +412,7 @@ export default function Sidebar({
                         to={notesPath(proj.slug)}
                         onClick={onCloseDrawer}
                         aria-label="All quick notes"
-                        className="group flex flex-1 items-center justify-between gap-1 rounded-md px-1.5 py-1 hover:bg-sidebar-accent"
+                        className="group flex h-7 flex-1 items-center gap-1.5 rounded-md px-1.5 hover:bg-sidebar-accent"
                       >
                         <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase group-hover:text-foreground">
                           Quick notes
@@ -305,27 +436,36 @@ export default function Sidebar({
                   </Tooltip>
                 </div>
                 {quickNotes.length === 0 ? (
-                  <div className="px-3 py-2 text-center text-xs text-muted-foreground">No quick notes yet</div>
+                  <div className="px-3 py-2 text-center text-xs text-muted-foreground">
+                    No quick notes yet
+                  </div>
                 ) : (
                   <>
                     {quickNotes.slice(0, 4).map((n) => {
-                      const active = activeNoteId === n.slug
+                      const active = activeNoteId === n.slug;
                       return (
                         <Link
                           key={n.id}
                           to={notePath(proj.slug, n.slug)}
                           onClick={onCloseDrawer}
                           className={cn(
-                            'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                             active
-                              ? 'bg-primary/15 font-medium text-foreground'
-                              : 'text-sidebar-foreground hover:bg-sidebar-accent',
+                              ? "bg-primary/15 font-medium text-foreground"
+                              : "text-sidebar-foreground hover:bg-sidebar-accent",
                           )}
                         >
-                          <QuickNoteIcon className={cn('size-3.75 shrink-0', active ? 'text-primary' : 'text-muted-foreground')} />
-                          <span className="min-w-0 flex-1 truncate">{docLabel(n)}</span>
+                          <QuickNoteIcon
+                            className={cn(
+                              "size-3.75 shrink-0",
+                              active ? "text-primary" : "text-muted-foreground",
+                            )}
+                          />
+                          <span className="min-w-0 flex-1 truncate">
+                            {docLabel(n)}
+                          </span>
                         </Link>
-                      )
+                      );
                     })}
                     {quickNotes.length > 4 && (
                       <Link
@@ -333,7 +473,8 @@ export default function Sidebar({
                         onClick={onCloseDrawer}
                         className="mt-0.5 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                       >
-                        Show all {quickNotes.length} <ArrowRight className="size-3" />
+                        Show all {quickNotes.length}{" "}
+                        <ArrowRight className="size-3" />
                       </Link>
                     )}
                   </>
@@ -343,14 +484,20 @@ export default function Sidebar({
           </>
         ) : (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            {user ? 'Select a project from the dashboard.' : 'Sign in to see your workspace.'}
+            {user
+              ? "Select a project from the dashboard."
+              : "Sign in to see your workspace."}
           </div>
         )}
       </nav>
 
       {user && (
         <div className="shrink-0 border-t border-sidebar-border p-2">
-          <Button variant="outline" className="w-full justify-start" onClick={() => void onCreateProject()}>
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={() => void onCreateProject()}
+          >
             <Plus /> New project
           </Button>
         </div>
@@ -360,28 +507,49 @@ export default function Sidebar({
         {user ? (
           <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="min-w-0 truncate text-sm font-medium" title={user.email ?? undefined}>
-                {user.name || user.email || 'Account'}
+              <span
+                className="min-w-0 truncate text-sm font-medium"
+                title={user.email ?? undefined}
+              >
+                {user.name || user.email || "Account"}
               </span>
-              {role === 'admin' && <Badge variant="destructive">A</Badge>}
-              {role === 'mod' && <Badge>MOD</Badge>}
+              {role === "admin" && <Badge variant="destructive">A</Badge>}
+              {role === "mod" && <Badge>MOD</Badge>}
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-7 shrink-0 text-muted-foreground" aria-label="Account menu">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0 text-muted-foreground"
+                  aria-label="Account menu"
+                >
                   <MoreHorizontal className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" side="top">
-                <DropdownMenuItem onSelect={() => { onCloseDrawer(); navigate('/profile') }}>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    onCloseDrawer();
+                    navigate("/profile");
+                  }}
+                >
                   <User /> Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); toggle() }}>
-                  {theme === 'dark' ? <Sun /> : <Moon />}
-                  {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    toggle();
+                  }}
+                >
+                  {theme === "dark" ? <Sun /> : <Moon />}
+                  {theme === "dark" ? "Light mode" : "Dark mode"}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onSelect={() => void onSignOut()}>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => void onSignOut()}
+                >
                   <LogOut /> Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -389,7 +557,11 @@ export default function Sidebar({
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <Button size="sm" className="flex-1" onClick={() => setShowLogin(true)}>
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowLogin(true)}
+            >
               Sign in
             </Button>
             <Button
@@ -399,7 +571,7 @@ export default function Sidebar({
               onClick={toggle}
               aria-label="Toggle theme"
             >
-              {theme === 'dark' ? <Sun /> : <Moon />}
+              {theme === "dark" ? <Sun /> : <Moon />}
             </Button>
           </div>
         )}
@@ -407,5 +579,5 @@ export default function Sidebar({
 
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </aside>
-  )
+  );
 }

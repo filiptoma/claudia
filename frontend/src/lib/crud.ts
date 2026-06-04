@@ -75,7 +75,11 @@ export async function createDocument(
   title: string,
 ): Promise<DocumentRec> {
   const sort_order = await nextOrder('documents', { project_id: projectId, folder_id: folderId })
-  return insertDocument({ title, project_id: projectId, folder_id: folderId, content: '', sort_order })
+  // Prefill the first line with an H1 of the title as a convenience. This is a one-time seed — the
+  // heading and the document title are NOT kept in sync afterwards. (Quick notes use createQuickNote
+  // and stay empty.)
+  const content = `# ${title.trim()}\n`
+  return insertDocument({ title, project_id: projectId, folder_id: folderId, content, sort_order })
 }
 
 // A quick note is a titleless root document flagged is_quick_note, created with one click in the

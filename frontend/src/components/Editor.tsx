@@ -10,8 +10,8 @@ import type { EditorState, Extension } from '@codemirror/state'
 import type { ViewUpdate } from '@codemirror/view'
 import { materialDark, materialLight } from '@uiw/codemirror-theme-material'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, Loader2, AlertCircle } from 'lucide-react'
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getAccessToken, supabase } from '../lib/supabase'
+import { useSaveStatus } from '../lib/saveStatus'
 import { uploadImage } from '../lib/storage'
 import { isInTable } from '../lib/mdTable'
 import { clampImageWidth, findImages, imageMarkdown, parseImageAt, stepWidth } from '../lib/mdImage'
@@ -27,8 +27,6 @@ import type { SlashCommand, SlashState } from './SlashMenu'
 import RefPicker from './RefPicker'
 import type { RefAnchor } from './RefPicker'
 import type { DocumentRec } from '../lib/types'
-
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 const BASIC_SETUP: BasicSetupOptions = {
   lineNumbers: false,
@@ -50,6 +48,16 @@ const cmChrome = EditorView.theme({
   '.cm-content': { padding: '1rem 1rem 5rem' },
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none' },
 })
+
+// materialLight is washed-out (light gray text on near-white); darken the body text + caret so the
+// light-mode editor is comfortably readable. Layered on top of materialLight (light mode only).
+const cmLightContrast = EditorView.theme(
+  {
+    '.cm-content': { color: '#1f2937' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#1f2937' },
+  },
+  { dark: false },
+)
 
 // The slash commands (stage 1). Only "Reference" today, but the menu is built to grow. `keywords`
 // widen what the user can type to match (e.g. `/link`, `/doc`, `/head` all surface Reference).
@@ -80,39 +88,6 @@ function buildCommands(query: string): SlashCommand[] {
     label: c.label,
     sub: c.sub,
   }))
-}
-
-function SaveIndicator({
-  status,
-  savedAt,
-  onRetry,
-}: {
-  status: SaveStatus
-  savedAt: Date | null
-  onRetry: () => void
-}) {
-  if (status === 'saving')
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" /> Saving…
-      </span>
-    )
-  if (status === 'error')
-    return (
-      <button
-        className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-destructive"
-        onClick={onRetry}
-      >
-        <AlertCircle className="size-3.5" /> Save failed — retry
-      </button>
-    )
-  if (status === 'saved')
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-emerald-600 dark:text-emerald-400">
-        <Check className="size-3.5" /> Saved{savedAt ? ` ${savedAt.toLocaleTimeString()}` : ''}
-      </span>
-    )
-  return <span className="inline-flex h-4 items-center text-xs" />
 }
 
 // Memoized so preview/status re-renders never touch CodeMirror (no flicker).
@@ -168,8 +143,6 @@ export default function Editor({
   const [preview, setPreview] = useState(doc.content)
   const deferredPreview = useDeferredValue(preview)
   const previewImages = useSignedImages(deferredPreview)
-  const [status, setStatus] = useState<SaveStatus>('idle')
-  const [savedAt, setSavedAt] = useState<Date | null>(null)
   const [inTable, setInTable] = useState(false)
   const [inImage, setInImage] = useState(false)
   const [imageWidth, setImageWidth] = useState<number | null>(null)
@@ -194,13 +167,13 @@ export default function Editor({
   const sessionRef = useRef(false)
   const menuKeyRef = useRef<(key: string) => boolean>(() => false)
 
-  const cmTheme: Extension = theme === 'dark' ? materialDark : materialLight
+  const cmTheme: Extension = theme === 'dark' ? materialDark : [materialLight, cmLightContrast]
 
   const doSave = useCallback(async () => {
     if (!dirty.current) return
     const content = latest.current
     dirty.current = false
-    setStatus('saving')
+    useSaveStatus.getState().set({ status: 'saving' })
     const { data, error } = await supabase
       .from('documents')
       .update({ content })
@@ -209,7 +182,7 @@ export default function Editor({
       .single()
     if (error) {
       dirty.current = true
-      setStatus('error')
+      useSaveStatus.getState().set({ status: 'error' })
       return
     }
     qc.setQueryData(treeKeys.document(doc.id), data) // keep cache fresh without a refetch
@@ -221,9 +194,19 @@ export default function Editor({
         old?.map((d) => (d.id === doc.id ? { ...d, updated_at: updatedAt } : d)),
       )
     }
-    setStatus('saved')
-    setSavedAt(new Date())
+    useSaveStatus.getState().set({ status: 'saved', savedAt: new Date() })
   }, [doc.id, qc])
+
+  // Surface autosave status in the app bar; register the retry handler and clear it on unmount.
+  useEffect(() => {
+    useSaveStatus.getState().set({
+      retry: () => {
+        dirty.current = true
+        void doSave()
+      },
+    })
+    return () => useSaveStatus.getState().reset()
+  }, [doSave])
 
   const handleChange = useCallback(
     (val: string) => {
@@ -607,7 +590,7 @@ export default function Editor({
     // The toolbar spans the full width above BOTH panes so the source and rendered content line up at
     // the same y (it used to sit inside the left pane only, shifting the preview up relative to it).
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card/40 px-2.5 py-1.5">
+      <div className="flex shrink-0 items-center border-b border-border bg-card/40 px-2.5 py-1.5">
         <EditorToolbar
           getView={() => cmRef.current?.view ?? null}
           onImageClick={() => fileInputRef.current?.click()}
@@ -618,14 +601,6 @@ export default function Editor({
           onImageWider={() => stepImageWidth(1)}
           onImageNarrower={() => stepImageWidth(-1)}
           onImageResetSize={resetImageWidth}
-        />
-        <SaveIndicator
-          status={status}
-          savedAt={savedAt}
-          onRetry={() => {
-            dirty.current = true
-            void doSave()
-          }}
         />
       </div>
       <div className={cn('flex min-h-0 flex-1', showPreview ? 'max-md:flex-col' : '')}>

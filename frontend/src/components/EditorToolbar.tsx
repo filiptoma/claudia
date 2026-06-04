@@ -16,13 +16,12 @@ import {
   Minus,
   Plus,
   RotateCcw,
-  BetweenHorizontalEnd,
-  BetweenVerticalEnd,
   ArrowUpFromLine,
   ArrowDownFromLine,
   ArrowLeftFromLine,
   ArrowRightFromLine,
   SquareMinus,
+  SquarePlus,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -72,12 +71,45 @@ const prefixLines =
     const toLine = state.doc.lineAt(state.selection.main.to).number
     const changes: ChangeSpec[] = []
     let i = 0
+    let emptyCursor: number | null = null
     for (let ln = fromLine; ln <= toLine; ln++) {
       const line = state.doc.line(ln)
-      changes.push({ from: line.from, insert: make(i++) })
+      const prefix = make(i++)
+      changes.push({ from: line.from, insert: prefix })
+      // On a single empty line, drop the caret right after the marker so you can type immediately.
+      if (fromLine === toLine && line.length === 0) emptyCursor = line.from + prefix.length
     }
-    view.dispatch({ changes })
+    view.dispatch({
+      changes,
+      ...(emptyCursor !== null ? { selection: EditorSelection.cursor(emptyCursor) } : {}),
+    })
   }
+
+// Heading button: cycle the current line(s) through H1 → H2 → H3 → H1, replacing the marker rather
+// than stacking more "#". A line with no heading becomes H1.
+const cycleHeading: Cmd = (view) => {
+  view.focus()
+  const { state } = view
+  const fromLine = state.doc.lineAt(state.selection.main.from).number
+  const toLine = state.doc.lineAt(state.selection.main.to).number
+  const changes: ChangeSpec[] = []
+  let emptyCursor: number | null = null
+  for (let ln = fromLine; ln <= toLine; ln++) {
+    const line = state.doc.line(ln)
+    const m = /^(#{1,6})\s+/.exec(line.text)
+    const level = m ? m[1].length : 0
+    const next = level >= 3 ? 1 : level + 1
+    const prefix = '#'.repeat(next) + ' '
+    const oldLen = m ? m[0].length : 0
+    changes.push({ from: line.from, to: line.from + oldLen, insert: prefix })
+    // Empty heading line (only the marker, no text): caret after the marker.
+    if (fromLine === toLine && line.text.length === oldLen) emptyCursor = line.from + prefix.length
+  }
+  view.dispatch({
+    changes,
+    ...(emptyCursor !== null ? { selection: EditorSelection.cursor(emptyCursor) } : {}),
+  })
+}
 
 const insertLink: Cmd = (view) => {
   view.focus()
@@ -132,7 +164,7 @@ const BASE_BUTTONS: ButtonDef[] = [
   { title: 'Bold', Icon: Bold, cmd: wrap('**') },
   { title: 'Italic', Icon: Italic, cmd: wrap('*') },
   { title: 'Strikethrough', Icon: Strikethrough, cmd: wrap('~~') },
-  { title: 'Heading', Icon: Heading, cmd: prefixLines(() => '## ') },
+  { title: 'Heading', Icon: Heading, cmd: cycleHeading },
   { title: 'Link', Icon: LinkIcon, cmd: insertLink },
   { title: 'Inline code', Icon: Code, cmd: wrap('`') },
   { title: 'Code block', Icon: SquareCode, cmd: insertCodeBlock },
@@ -142,19 +174,18 @@ const BASE_BUTTONS: ButtonDef[] = [
 ]
 
 const INSERT_BUTTONS: ButtonDef[] = [
-  { title: 'Insert table', Icon: Table, cmd: insertBlock(TABLE_TEMPLATE) },
   { title: 'Horizontal line', Icon: Minus, cmd: insertBlock('---') },
 ]
 
 // Table controls, grouped for the second toolbar row (shown only when the cursor is in a table).
 const ROW_BUTTONS: ButtonDef[] = [
-  { title: 'Add row below', Icon: BetweenHorizontalEnd, cmd: tableAddRow },
+  { title: 'Add row below', Icon: SquarePlus, cmd: tableAddRow },
   { title: 'Delete row', Icon: SquareMinus, cmd: tableRemoveRow },
   { title: 'Move row up', Icon: ArrowUpFromLine, cmd: tableMoveRowUp },
   { title: 'Move row down', Icon: ArrowDownFromLine, cmd: tableMoveRowDown },
 ]
 const COLUMN_BUTTONS: ButtonDef[] = [
-  { title: 'Add column right', Icon: BetweenVerticalEnd, cmd: tableAddColRight },
+  { title: 'Add column right', Icon: SquarePlus, cmd: tableAddColRight },
   { title: 'Delete column', Icon: SquareMinus, cmd: tableRemoveCol },
   { title: 'Move column left', Icon: ArrowLeftFromLine, cmd: tableMoveColLeft },
   { title: 'Move column right', Icon: ArrowRightFromLine, cmd: tableMoveColRight },
@@ -198,7 +229,7 @@ const ToolSep = () => <Separator orientation="vertical" className="mx-1 h-5!" />
 // A labelled cluster of table buttons (Row / Column / Alignment) for the second toolbar row.
 function ToolGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex items-center gap-1">
       <span className="px-1 text-[0.62rem] leading-none font-semibold tracking-wide text-muted-foreground/70 uppercase">
         {label}
       </span>
@@ -293,34 +324,38 @@ export default function EditorToolbar({
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      {/* Line 1: the standard formatting controls. */}
-      <div className="flex flex-wrap items-center gap-0.5">
-        <ButtonRow buttons={BASE_BUTTONS} run={run} />
-        <ToolSep />
-        <ButtonRow buttons={INSERT_BUTTONS} run={run} />
-        <ToolButton title="Insert image" onClick={onImageClick}>
-          <ImageIcon />
+    <div className="flex flex-wrap items-center gap-0.5">
+      <ButtonRow buttons={BASE_BUTTONS} run={run} />
+      <ToolSep />
+      {/* Insert table — shown unless the cursor is already inside a table (then the table controls show). */}
+      {!inTable && (
+        <ToolButton title="Insert table" onClick={run(insertBlock(TABLE_TEMPLATE))}>
+          <Table />
         </ToolButton>
-        <ToolButton title="Insert reference (type / in the editor)" onClick={onRefClick}>
-          <AtSign />
-        </ToolButton>
-      </div>
-      {/* Line 2: table controls (Row / Column / Alignment), only while the cursor is in a table. */}
+      )}
+      <ButtonRow buttons={INSERT_BUTTONS} run={run} />
+      <ToolButton title="Insert image" onClick={onImageClick}>
+        <ImageIcon />
+      </ToolButton>
+      <ToolButton title="Insert reference (type / in the editor)" onClick={onRefClick}>
+        <AtSign />
+      </ToolButton>
+      {/* Table controls (Row / Column / Alignment) — inline, only while the cursor is in a table. */}
       {inTable && (
-        <div className="flex flex-wrap items-stretch gap-1.5 border-t border-border/60 pt-1">
+        <>
+          <ToolSep />
           <ToolGroup label="Row">
             <ButtonRow buttons={ROW_BUTTONS} run={run} />
           </ToolGroup>
-          <Separator orientation="vertical" className="mx-0.5" />
+          <ToolSep />
           <ToolGroup label="Column">
             <ButtonRow buttons={COLUMN_BUTTONS} run={run} />
           </ToolGroup>
-          <Separator orientation="vertical" className="mx-0.5" />
+          <ToolSep />
           <ToolGroup label="Alignment">
             <ButtonRow buttons={ALIGN_BUTTONS} run={run} />
           </ToolGroup>
-        </div>
+        </>
       )}
     </div>
   )

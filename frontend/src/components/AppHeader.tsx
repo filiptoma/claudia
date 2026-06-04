@@ -17,6 +17,7 @@ import ActionsMenu from './ActionsMenu'
 import type { MenuAction } from './ActionsMenu'
 import ModeSwitch from './ModeSwitch'
 import type { Mode } from './ModeSwitch'
+import SaveIndicator from './SaveIndicator'
 import { DocIcon, FolderGlyph, ProjectGlyph, QuickNoteIcon } from './EntityIcons'
 
 const ICON_CLS = 'size-4 shrink-0 text-muted-foreground'
@@ -105,6 +106,7 @@ export default function AppHeader() {
           items={items}
           actions={
             <>
+              <SaveIndicator />
               <ModeSwitch mode={mode} onChange={setMode} />
               <ActionsMenu alwaysVisible label="Note actions" actions={menu} />
             </>
@@ -193,6 +195,7 @@ export default function AppHeader() {
         actions={
           canEdit ? (
             <>
+              <SaveIndicator />
               <ModeSwitch mode={mode} onChange={setMode} />
               <ActionsMenu alwaysVisible label="Document actions" actions={menu} />
             </>
