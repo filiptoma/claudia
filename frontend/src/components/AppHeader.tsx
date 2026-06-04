@@ -199,7 +199,8 @@ export default function AppHeader() {
 
   // ----- top-level (non-project) pages -----
   if (!projectSlug) {
-    let items: Crumb[] = [{ label: "Dashboard" }];
+    // Logged-out visitors see the public landing ("Home"); signed-in users get their "Dashboard".
+    let items: Crumb[] = [{ label: uid ? "Dashboard" : "Home" }];
     if (location.pathname === "/profile") items = [{ label: "Profile" }];
     else if (location.pathname === "/admin") items = [{ label: "Admin" }];
     else if (location.pathname === "/admin/users")

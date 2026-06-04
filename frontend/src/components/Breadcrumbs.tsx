@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ChevronRight, Home as HomeIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useAuth } from '../context/AuthContext'
 
 export interface Crumb {
   label: string
@@ -71,19 +72,22 @@ function EditableCrumb({
  * current page (optionally an inline rename input).
  */
 export default function Breadcrumbs({ items }: { items: Crumb[] }) {
+  // Logged-out visitors land on the public "Home"; signed-in users on their "Dashboard".
+  const { uid } = useAuth()
+  const homeLabel = uid ? 'Dashboard' : 'Home'
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm">
       <Tooltip>
         <TooltipTrigger asChild>
           <Link
             to="/"
-            aria-label="Dashboard"
+            aria-label={homeLabel}
             className="-m-1 flex shrink-0 items-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <HomeIcon className="size-4" />
           </Link>
         </TooltipTrigger>
-        <TooltipContent>Dashboard</TooltipContent>
+        <TooltipContent>{homeLabel}</TooltipContent>
       </Tooltip>
       {items.map((c, i) => {
         const last = i === items.length - 1
