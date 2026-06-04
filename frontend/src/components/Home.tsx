@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Globe, Layers, Lock, Plus, StickyNote } from 'lucide-react'
 import { useTree } from '../hooks/useTree'
@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import ItemCard from './ItemCard'
 import EmptyState from './EmptyState'
-import LoginModal from './LoginModal'
 import { ProjectGlyph, WorkspaceIcon } from './EntityIcons'
 import type { Project } from '../lib/types'
 
@@ -23,7 +22,6 @@ export default function Home() {
   const { user, uid, isStaff } = useAuth()
   const actions = useTreeActions()
   const navigate = useNavigate()
-  const [showLogin, setShowLogin] = useState(false)
 
   // The home dashboard's tab shows the bare app name.
   useDocumentTitle(APP_NAME)
@@ -60,6 +58,47 @@ export default function Home() {
   }
 
   if (loading) return <div className="p-10 text-muted-foreground">Loading…</div>
+
+  // ----- logged-out landing: the public projects, with a short masthead naming the app. No
+  // "Dashboard"/workspace chrome and no sign-in button here — the sidebar owns sign-in. -----
+  if (!user) {
+    return (
+      <div className="mx-auto w-full max-w-7xl px-8 pt-12 pb-24 max-md:px-5 max-md:pt-14">
+        <header className="border-b border-border pb-8">
+          <h1 className="text-[2.5rem] font-bold tracking-tight text-balance">Notes, written in the open</h1>
+          <p className="mt-3 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+            Explore the public markdown projects shared on {APP_NAME}.
+          </p>
+        </header>
+
+        {myProjects.length === 0 ? (
+          <EmptyState
+            className="mt-16"
+            accent="muted"
+            icon={<Globe />}
+            title="Nothing public yet"
+            hint="There are no public projects to explore right now."
+          />
+        ) : (
+          <div className={`${GRID} mt-8`}>
+            {myProjects.map((p: Project) => {
+              const count = documents.filter((d) => d.project_id === p.id).length
+              const visibility = projectVisibility(p, memberCount.get(p.id) ?? 0)
+              return (
+                <ItemCard
+                  key={p.id}
+                  icon={<ProjectGlyph project={p} visibility={visibility} />}
+                  title={p.name}
+                  meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
+                  onOpen={() => navigate(projectPath(p.slug))}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl px-8 pt-10 pb-24 max-md:px-5 max-md:pt-14">
@@ -121,28 +160,17 @@ export default function Home() {
         </div>
 
         {myProjects.length === 0 ? (
-          user ? (
-            <EmptyState
-              className="mt-8"
-              icon={<Layers />}
-              title="No projects yet"
-              hint="Create a project to group documents into folders and share them with others."
-              actions={
-                <Button onClick={() => void onCreateProject()}>
-                  <Plus /> Create your first project
-                </Button>
-              }
-            />
-          ) : (
-            <EmptyState
-              className="mt-8"
-              accent="muted"
-              icon={<Globe />}
-              title="Nothing public yet"
-              hint="There’s no public content here yet. Sign in to see the projects shared with you."
-              actions={<Button onClick={() => setShowLogin(true)}>Sign in</Button>}
-            />
-          )
+          <EmptyState
+            className="mt-8"
+            icon={<Layers />}
+            title="No projects yet"
+            hint="Create a project to group documents into folders and share them with others."
+            actions={
+              <Button onClick={() => void onCreateProject()}>
+                <Plus /> Create your first project
+              </Button>
+            }
+          />
         ) : (
           <div className={GRID}>
             {myProjects.map((p: Project) => {
@@ -164,8 +192,6 @@ export default function Home() {
           </div>
         )}
       </section>
-
-      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </div>
   )
 }
