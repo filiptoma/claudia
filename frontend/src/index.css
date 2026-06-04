@@ -1,5 +1,5 @@
-@import 'tailwindcss';
-@import 'tw-animate-css';
+@import "tailwindcss";
+@import "tw-animate-css";
 
 /* Dark mode is driven by a `.dark` class on <html> (set before first paint in index.html). */
 @custom-variant dark (&:is(.dark *));
@@ -171,8 +171,11 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --font-sans: 'Hanken Grotesk Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans:
+    "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mono:
+    "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 @layer base {
@@ -199,7 +202,8 @@
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
+    scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent)
+      transparent;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -259,16 +263,17 @@
   font-size: 2.2rem;
   font-weight: 800;
   letter-spacing: -0.025em;
-  margin-bottom: 1rem;
+  margin-bottom: 2rem;
 }
 .md h2 {
   font-size: 1.6rem;
   padding-bottom: 0.25em;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 0.9rem;
+  margin-bottom: 1.5rem;
 }
 .md h3 {
   font-size: 1.32rem;
+  margin-bottom: 1.25rem;
 }
 .md h4 {
   font-size: 1.12rem;
@@ -346,7 +351,7 @@
 
 /* Task-list checkbox: a custom control tinted with the primary accent. Interactive in the editor
    preview (see Markdown.tsx), where toggling rewrites the underlying `- [ ]` / `- [x]` source. */
-.md input[type='checkbox'] {
+.md input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   flex: none;
@@ -364,15 +369,15 @@
     background-color 90ms ease,
     border-color 90ms ease;
 }
-.md input[type='checkbox']:not(:disabled):hover {
+.md input[type="checkbox"]:not(:disabled):hover {
   border-color: var(--primary);
 }
-.md input[type='checkbox']:checked {
+.md input[type="checkbox"]:checked {
   background: var(--primary);
   border-color: var(--primary);
 }
-.md input[type='checkbox']:checked::after {
-  content: '';
+.md input[type="checkbox"]:checked::after {
+  content: "";
   width: 0.32em;
   height: 0.6em;
   margin-top: -0.1em;
@@ -380,7 +385,7 @@
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
-.md input[type='checkbox']:disabled {
+.md input[type="checkbox"]:disabled {
   cursor: default;
   opacity: 0.85;
 }
