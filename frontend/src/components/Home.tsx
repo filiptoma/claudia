@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Layers, Lock, Plus, StickyNote } from 'lucide-react'
+import { ArrowRight, Globe, Layers, Lock, Plus, StickyNote } from 'lucide-react'
 import { useTree } from '../hooks/useTree'
 import { useAuth } from '../context/AuthContext'
 import { useTreeActions } from '../hooks/useTreeActions'
@@ -9,17 +9,21 @@ import { projectVisibility } from '../lib/access'
 import { APP_NAME } from '../lib/brand'
 import { noteSplitPath, projectPath } from '../lib/paths'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import ItemCard from './ItemCard'
+import EmptyState from './EmptyState'
+import LoginModal from './LoginModal'
 import { ProjectGlyph, WorkspaceIcon } from './EntityIcons'
 import type { Project } from '../lib/types'
 
-const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
 
 export default function Home() {
   const { projects, documents, members, loading } = useTree()
   const { user, uid, isStaff } = useAuth()
   const actions = useTreeActions()
   const navigate = useNavigate()
+  const [showLogin, setShowLogin] = useState(false)
 
   // The home dashboard's tab shows the bare app name.
   useDocumentTitle(APP_NAME)
@@ -67,19 +71,21 @@ export default function Home() {
       {workspace && (
         <section className="mb-10">
           <h2 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">My Workspace</h2>
-          <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-sm sm:flex-row sm:items-center">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-foreground">
-              <WorkspaceIcon className="size-6" />
+          {/* A static callout hero: card base + a subtle gold→indigo (primary→secondary) wash to set
+              it apart from the plain project cards. Gradient is semi-transparent so text stays clean. */}
+          <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card bg-linear-to-br from-primary/10 to-accent2/10 p-6 shadow-sm sm:flex-row sm:items-center">
+            <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm shadow-primary/25 [&_svg]:size-7">
+              <WorkspaceIcon />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="font-semibold">My Workspace</div>
-              <div className="text-sm text-muted-foreground">
+              <div className="text-lg font-semibold tracking-tight">My Workspace</div>
+              <div className="mt-1 text-sm leading-relaxed text-muted-foreground">
                 Your private space — organize notes into folders, or jot something down in seconds.
               </div>
             </div>
-            <div className="flex shrink-0 gap-2">
-              <Button variant="outline" onClick={() => void onQuickNote()}>
-                <StickyNote /> Quick note
+            <div className="flex shrink-0 gap-2 max-sm:flex-wrap">
+              <Button variant="accent" onClick={() => void onQuickNote()}>
+                <StickyNote /> New quick note
               </Button>
               <Button onClick={() => navigate(projectPath(workspace.slug))}>
                 Open workspace <ArrowRight />
@@ -92,15 +98,21 @@ export default function Home() {
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Projects</h2>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {isStaff && (
-              <Button variant="outline" size="sm" asChild>
-                <Link to="/admin/projects">
-                  <Layers /> Manage all projects
-                </Link>
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="Manage all projects" asChild>
+                    <Link to="/admin/projects">
+                      <Layers />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Manage all projects</TooltipContent>
+              </Tooltip>
             )}
-            {user && (
+            {/* When there are no projects the empty-state CTA below is the single call to action. */}
+            {user && myProjects.length > 0 && (
               <Button size="sm" onClick={() => void onCreateProject()}>
                 <Plus /> New project
               </Button>
@@ -109,18 +121,28 @@ export default function Home() {
         </div>
 
         {myProjects.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border p-10 text-center">
-            <p className="text-muted-foreground">
-              {user
-                ? 'No projects yet — create your first to get started.'
-                : 'There is no public content here yet. Sign in to see projects shared with you.'}
-            </p>
-            {user && (
-              <Button className="mt-4" onClick={() => void onCreateProject()}>
-                <Plus /> Create your first project
-              </Button>
-            )}
-          </div>
+          user ? (
+            <EmptyState
+              className="mt-8"
+              icon={<Layers />}
+              title="No projects yet"
+              hint="Create a project to group documents into folders and share them with others."
+              actions={
+                <Button onClick={() => void onCreateProject()}>
+                  <Plus /> Create your first project
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              className="mt-8"
+              accent="muted"
+              icon={<Globe />}
+              title="Nothing public yet"
+              hint="There’s no public content here yet. Sign in to see the projects shared with you."
+              actions={<Button onClick={() => setShowLogin(true)}>Sign in</Button>}
+            />
+          )
         ) : (
           <div className={GRID}>
             {myProjects.map((p: Project) => {
@@ -142,6 +164,8 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </div>
   )
 }

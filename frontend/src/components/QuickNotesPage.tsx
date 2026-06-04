@@ -6,11 +6,12 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { noteSplitPath } from '../lib/paths'
 import { Button } from '@/components/ui/button'
 import QuickNoteCard from './QuickNoteCard'
+import EmptyState from './EmptyState'
 import { QuickNoteIcon } from './EntityIcons'
 import type { MenuAction } from './ActionsMenu'
 import type { DocMeta } from '../hooks/useTree'
 
-const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
 
 export default function QuickNotesPage() {
   const { projectSlug } = useParams()
@@ -36,31 +37,25 @@ export default function QuickNotesPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-8 pt-10 pb-24 max-md:px-5 max-md:pt-14">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-[2rem] font-bold tracking-tight">Quick notes</h1>
-          <p className="mt-1 text-muted-foreground">
-            Jot things down without worrying about a title or where they go.
-          </p>
-        </div>
-        <Button className="shrink-0" onClick={() => void onNew()}>
-          <Plus /> New quick note
-        </Button>
+      <div className="mb-6">
+        <h1 className="text-[2rem] font-bold tracking-tight">Quick notes</h1>
+        <p className="mt-1 text-muted-foreground">
+          Jot things down without worrying about a title or where they go.
+        </p>
       </div>
 
       {notes.length === 0 ? (
-        <div className="mt-[6vh] flex flex-col items-center text-center">
-          <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-            <QuickNoteIcon className="size-7" />
-          </span>
-          <h2 className="text-lg font-semibold">No quick notes yet</h2>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Capture a thought now and organize it later — or never.
-          </p>
-          <Button className="mt-5" onClick={() => void onNew()}>
-            <Plus /> New quick note
-          </Button>
-        </div>
+        <EmptyState
+          accent="indigo"
+          icon={<QuickNoteIcon />}
+          title="No quick notes yet"
+          hint="Capture a thought now and organize it later — or never."
+          actions={
+            <Button variant="accent" onClick={() => void onNew()}>
+              <Plus /> New quick note
+            </Button>
+          }
+        />
       ) : (
         <div className={GRID}>
           {notes.map((n) => (

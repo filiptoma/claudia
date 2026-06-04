@@ -15,15 +15,17 @@ import { Button } from '@/components/ui/button'
 import QuerySuspense from './QuerySuspense'
 import ItemCard from './ItemCard'
 import QuickNoteCard from './QuickNoteCard'
+import EmptyState from './EmptyState'
 import { DocIcon, FolderGlyph, WorkspaceIcon } from './EntityIcons'
 import type { MenuAction } from './ActionsMenu'
 import type { DocMeta } from '../hooks/useTree'
 import type { Folder } from '../lib/types'
 
-const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+// Wider, 3-up grid so longer titles wrap to two lines instead of truncating.
+const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
 
-// Up to 7 quick-note cards + the "View all" cell fill two rows of four on large screens.
-const WORKSPACE_NOTE_LIMIT = 7
+// Up to 5 quick-note cards + the "View all" cell fill two rows of three on large screens.
+const WORKSPACE_NOTE_LIMIT = 5
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -127,7 +129,7 @@ export default function ProjectHome() {
             <div className="mx-auto w-full max-w-7xl px-8 pt-7 pb-24 max-md:px-5">
               {folderDocs.length === 0 ? (
                 <EmptyState
-                  icon={<FolderGlyph className="size-7" />}
+                  icon={<FolderGlyph />}
                   title="This folder is empty"
                   hint={canEdit ? 'Create your first document to get started.' : 'There’s nothing here yet.'}
                   actions={
@@ -152,25 +154,27 @@ export default function ProjectHome() {
           const empty = projectFolders.length === 0 && files.length === 0 && workspaceNotes.length === 0
           return (
             <div className="mx-auto w-full max-w-7xl px-8 pt-7 pb-24 max-md:px-5">
-              {canEdit && (
-                <div className="mb-7 flex flex-wrap gap-2">
-                  <Button onClick={() => void onNewQuickNote()}>
-                    <StickyNote /> New quick note
-                  </Button>
-                  <Button variant="outline" onClick={() => void onNewDoc(null)}>
-                    <FilePlus /> New document
-                  </Button>
-                  <Button variant="outline" onClick={() => void actions.newFolder(project)}>
-                    <FolderPlus /> New folder
-                  </Button>
-                </div>
-              )}
-
               {empty ? (
                 <EmptyState
-                  icon={<WorkspaceIcon className="size-7" />}
+                  accent="indigo"
+                  icon={<WorkspaceIcon />}
                   title="Your workspace is empty"
                   hint="Capture a quick note, or create your first document or folder."
+                  actions={
+                    canEdit && (
+                      <>
+                        <Button variant="accent" onClick={() => void onNewQuickNote()}>
+                          <StickyNote /> New quick note
+                        </Button>
+                        <Button variant="soft" onClick={() => void onNewDoc(null)}>
+                          <FilePlus /> New document
+                        </Button>
+                        <Button variant="soft" onClick={() => void actions.newFolder(project)}>
+                          <FolderPlus /> New folder
+                        </Button>
+                      </>
+                    )
+                  }
                 />
               ) : (
                 <div className="flex flex-col gap-9">
@@ -184,7 +188,7 @@ export default function ProjectHome() {
                         ))}
                         <Link
                           to={notesPath(project.slug)}
-                          className="group flex items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card/40 p-4 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                          className="group flex items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card/40 p-4 text-sm font-medium text-muted-foreground transition-colors hover:border-accent2/60 hover:text-foreground"
                         >
                           View all quick notes
                           <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
@@ -204,17 +208,17 @@ export default function ProjectHome() {
           <div className="mx-auto w-full max-w-7xl px-8 pt-7 pb-24 max-md:px-5">
             {empty ? (
               <EmptyState
-                icon={<DocIcon className="size-7" />}
+                icon={<DocIcon />}
                 title="This project is empty"
                 hint={canEdit ? 'Create your first document to get started.' : 'There’s nothing here yet.'}
                 actions={
                   canEdit && (
                     <>
-                      <Button variant="outline" onClick={() => void actions.newFolder(project)}>
-                        <FolderPlus /> New folder
-                      </Button>
                       <Button onClick={() => void onNewDoc(null)}>
                         <FilePlus /> New document
+                      </Button>
+                      <Button variant="soft" onClick={() => void actions.newFolder(project)}>
+                        <FolderPlus /> New folder
                       </Button>
                     </>
                   )
@@ -230,28 +234,5 @@ export default function ProjectHome() {
         )
       })()}
     </QuerySuspense>
-  )
-}
-
-function EmptyState({
-  icon,
-  title,
-  hint,
-  actions,
-}: {
-  icon: ReactNode
-  title: string
-  hint: string
-  actions?: ReactNode
-}) {
-  return (
-    <div className="mt-[8vh] flex flex-col items-center text-center">
-      <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-        {icon}
-      </span>
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{hint}</p>
-      {actions && <div className="mt-5 flex gap-2">{actions}</div>}
-    </div>
   )
 }

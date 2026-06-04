@@ -25,6 +25,7 @@ export default function QuickNoteCard({
       meta={`Updated ${formatDateTime(note.updated_at)}`}
       onOpen={() => navigate(notePath(workspaceSlug, note.slug))}
       menu={menu}
+      accent="indigo"
     />
   )
 }

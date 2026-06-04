@@ -30,8 +30,8 @@
   --muted: oklch(0.96 0 0);
   --muted-foreground: oklch(0.5 0 0);
 
-  --accent: oklch(0.95 0.02 90);
-  --accent-foreground: oklch(0.28 0.02 90);
+  --accent: oklch(0.955 0.003 90);
+  --accent-foreground: oklch(0.3 0 0);
 
   --destructive: oklch(0.58 0.17 27);
   --destructive-foreground: oklch(0.98 0 0);
@@ -45,6 +45,12 @@
 
   /* Inline-code text: a subtle warm accent in the primary hue, but readable on light surfaces. */
   --code: oklch(0.52 0.13 74);
+
+  /* Secondary brand accent — a vivid indigo (#4A2FED) that contrasts the warm-gold primary. Used
+     for the quick-note identity (icon chips) and the accent button variant. White text on the fill
+     clears WCAG AA (~7:1). */
+  --accent2: oklch(0.487 0.261 277);
+  --accent2-foreground: oklch(0.99 0 0);
 
   --chart-1: oklch(0.82 0.155 88);
   --chart-2: oklch(0.6 0.1 250);
@@ -85,7 +91,7 @@
   --muted: oklch(0.25 0 0);
   --muted-foreground: oklch(0.7 0 0);
 
-  --accent: oklch(0.285 0.01 90);
+  --accent: oklch(0.275 0.003 90);
   --accent-foreground: oklch(0.92 0 0);
 
   --destructive: oklch(0.62 0.16 27);
@@ -97,6 +103,10 @@
 
   --link: oklch(0.86 0.155 92);
   --code: oklch(0.84 0.13 92);
+
+  /* Lighter indigo so it pops on dark surfaces; dark text sits on the fill. */
+  --accent2: oklch(0.66 0.19 277);
+  --accent2-foreground: oklch(0.18 0.02 277);
 
   --chart-1: oklch(0.86 0.155 92);
   --chart-2: oklch(0.7 0.1 250);
@@ -138,6 +148,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-link: var(--link);
+  --color-accent2: var(--accent2);
+  --color-accent2-foreground: var(--accent2-foreground);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

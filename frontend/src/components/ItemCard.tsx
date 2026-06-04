@@ -15,6 +15,7 @@ export default function ItemCard({
   meta,
   onOpen,
   menu = [],
+  accent = 'default',
   className,
 }: {
   icon: ReactNode
@@ -24,6 +25,8 @@ export default function ItemCard({
   meta?: ReactNode
   onOpen: () => void
   menu?: MenuAction[]
+  /** Icon-chip tint. 'indigo' marks the quick-note identity; everything else uses the warm default. */
+  accent?: 'default' | 'indigo'
   className?: string
 }) {
   const hasMenu = menu.length > 0
@@ -37,22 +40,29 @@ export default function ItemCard({
       <button
         onClick={onOpen}
         className={cn(
-          'flex w-full items-center gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-colors',
+          'flex h-full w-full items-center gap-3.5 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-colors',
           'group-hover:border-primary/50 group-hover:shadow-md',
           'focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
           hasMenu && 'pr-12',
         )}
       >
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/15 group-hover:text-foreground [&_svg]:size-5">
+        <span
+          className={cn(
+            'flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors [&_svg]:size-5',
+            accent === 'indigo'
+              ? 'bg-accent2/12 text-accent2 group-hover:bg-accent2/20'
+              : 'bg-muted text-muted-foreground group-hover:bg-primary/15 group-hover:text-foreground',
+          )}
+        >
           {icon}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
-            {titleAccessory}
+          <span className="flex items-start gap-1.5">
+            <span className="min-w-0 flex-1 font-medium leading-snug line-clamp-2">{title}</span>
+            {titleAccessory && <span className="mt-0.5 shrink-0">{titleAccessory}</span>}
           </span>
           {meta != null && (
-            <span className="mt-0.5 block truncate text-xs text-muted-foreground">{meta}</span>
+            <span className="mt-1 block truncate text-xs text-muted-foreground">{meta}</span>
           )}
         </span>
       </button>

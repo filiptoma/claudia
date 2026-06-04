@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { FilePlus, FolderPlus, Pencil, Plus, Settings, Trash2 } from 'lucide-react'
+import { FilePlus, FolderPlus, Pencil, Plus, Settings, StickyNote, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
@@ -10,11 +10,11 @@ import { useQuickNotes } from '../hooks/useQuickNotes'
 import { canConfigureProject, canEditProject, projectVisibility } from '../lib/access'
 import { docSplitPath, folderPath, notesPath, noteSplitPath, projectPath, projectSettingsPath } from '../lib/paths'
 import { docLabel, formatDateTime } from '../lib/labels'
-import { Button } from '@/components/ui/button'
 import Breadcrumbs from './Breadcrumbs'
 import type { Crumb } from './Breadcrumbs'
 import ActionsMenu from './ActionsMenu'
 import type { MenuAction } from './ActionsMenu'
+import CreateMenu from './CreateMenu'
 import ModeSwitch from './ModeSwitch'
 import type { Mode } from './ModeSwitch'
 import SaveIndicator from './SaveIndicator'
@@ -27,12 +27,12 @@ export default function AppHeader() {
   const location = useLocation()
   const navigate = useNavigate()
   const { role, uid } = useAuth()
-  const { members, folders } = useTree()
+  const { members, folders, documents } = useTree()
   const actions = useTreeActions()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const params = useParams()
-  const { workspace, findNote } = useQuickNotes()
+  const { workspace, notes, findNote } = useQuickNotes()
 
   const memberCount = useMemo(
     () => (project ? members.filter((m) => m.project_id === project.id).length : 0),
@@ -123,10 +123,11 @@ export default function AppHeader() {
       <HeaderShell
         items={[workspaceCrumb, notesCrumb(true)]}
         actions={
-          workspace ? (
-            <Button size="sm" onClick={() => void onNew()}>
-              <Plus /> New quick note
-            </Button>
+          workspace && notes.length > 0 ? (
+            <CreateMenu
+              variant="accent"
+              actions={[{ label: 'New quick note', icon: <Plus />, onSelect: () => void onNew() }]}
+            />
           ) : null
         }
       />
@@ -228,22 +229,27 @@ export default function AppHeader() {
         },
       },
     ]
+    const folderEmpty = !documents.some((d) => d.folder_id === folder.id)
     return (
       <HeaderShell
         items={items}
         actions={
           canEdit ? (
             <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  const d = await actions.newDocument(project, folder.id)
-                  if (d) navigate(docSplitPath(project.slug, d, folders))
-                }}
-              >
-                <FilePlus /> New document
-              </Button>
+              {!folderEmpty && (
+                <CreateMenu
+                  actions={[
+                    {
+                      label: 'New document',
+                      icon: <FilePlus />,
+                      onSelect: async () => {
+                        const d = await actions.newDocument(project, folder.id)
+                        if (d) navigate(docSplitPath(project.slug, d, folders))
+                      },
+                    },
+                  ]}
+                />
+              )}
               <ActionsMenu alwaysVisible label="Folder actions" actions={menu} />
             </>
           ) : null
@@ -267,24 +273,43 @@ export default function AppHeader() {
         },
       ]
     : []
+
+  // The page body owns the create CTA while a project is empty (one clear call to action), so the
+  // header only carries "New" once there's content. Emptiness mirrors ProjectHome exactly.
+  const rootDocs = documents.filter((d) => d.project_id === project.id && !d.folder_id && !d.is_quick_note)
+  const hasFolders = folders.some((f) => f.project_id === project.id)
+  const projectEmpty =
+    !hasFolders && rootDocs.length === 0 && (!project.is_workspace || notes.length === 0)
+
+  const goNewDoc = async () => {
+    const d = await actions.newDocument(project, null)
+    if (d) navigate(docSplitPath(project.slug, d, folders))
+  }
+  const createActions: MenuAction[] = project.is_workspace
+    ? [
+        {
+          label: 'Quick note',
+          icon: <StickyNote className="text-accent2" />,
+          onSelect: async () => {
+            const n = await actions.newQuickNote()
+            if (n) navigate(noteSplitPath(project.slug, n.slug))
+          },
+        },
+        { label: 'Document', icon: <FilePlus />, onSelect: () => void goNewDoc() },
+        { label: 'Folder', icon: <FolderPlus />, onSelect: () => void actions.newFolder(project) },
+      ]
+    : [
+        { label: 'Document', icon: <FilePlus />, onSelect: () => void goNewDoc() },
+        { label: 'Folder', icon: <FolderPlus />, onSelect: () => void actions.newFolder(project) },
+      ]
+
   return (
     <HeaderShell
       items={[projectCrumb]}
       actions={
         canEdit ? (
           <>
-            <Button size="sm" variant="outline" onClick={() => void actions.newFolder(project)}>
-              <FolderPlus /> New folder
-            </Button>
-            <Button
-              size="sm"
-              onClick={async () => {
-                const d = await actions.newDocument(project, null)
-                if (d) navigate(docSplitPath(project.slug, d, folders))
-              }}
-            >
-              <FilePlus /> New document
-            </Button>
+            {!projectEmpty && <CreateMenu actions={createActions} />}
             <ActionsMenu alwaysVisible label="Project actions" actions={overflow} />
           </>
         ) : null
