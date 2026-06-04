@@ -247,11 +247,13 @@
   font-size: 2.2rem;
   font-weight: 800;
   letter-spacing: -0.025em;
+  margin-bottom: 1rem;
 }
 .md h2 {
   font-size: 1.6rem;
   padding-bottom: 0.25em;
   border-bottom: 1px solid var(--border);
+  margin-bottom: 0.9rem;
 }
 .md h3 {
   font-size: 1.32rem;
