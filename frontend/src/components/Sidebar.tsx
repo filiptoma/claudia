@@ -32,6 +32,7 @@ import type { DocMeta } from "../hooks/useTree";
 import { useTreeActions } from "../hooks/useTreeActions";
 import { useRouteContext } from "../hooks/useRouteContext";
 import { useQuickNotes } from "../hooks/useQuickNotes";
+import { useSidebar } from "../context/SidebarContext";
 import {
   canConfigureProject,
   canEditProject,
@@ -48,9 +49,6 @@ import {
   projectSettingsPath,
 } from "../lib/paths";
 import { docLabel } from "../lib/labels";
-import { APP_NAME } from "../lib/brand";
-import astroLogoBlack from "../assets/astro-black.svg";
-import astroLogoWhite from "../assets/astro-white.svg";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -87,6 +85,7 @@ export default function Sidebar({
   const { id: activeNoteId } = useParams();
   const actions = useTreeActions();
   const navigate = useNavigate();
+  const { collapsed: sidebarCollapsed } = useSidebar();
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showLogin, setShowLogin] = useState(false);
@@ -351,230 +350,220 @@ export default function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-full w-72 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
-        "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl max-md:transition-transform max-md:duration-200",
+        "flex h-full shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "w-80 transition-[width,transform] duration-300 ease-in-out",
+        sidebarCollapsed && "md:w-0 md:border-r-0",
+        "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl",
         drawerOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
       )}
     >
-      <div className="flex h-13 shrink-0 items-center px-4 border-b border-sidebar-border">
-        <Link
-          to="/"
-          className="flex items-center gap-2 text-lg font-bold tracking-tight"
-          onClick={onCloseDrawer}
-        >
-          {/* black logo on light theme, white on dark (.dark on <html>) */}
-          <img
-            src={astroLogoBlack}
-            alt=""
-            aria-hidden
-            className="size-8 dark:hidden"
-          />
-          <img
-            src={astroLogoWhite}
-            alt=""
-            aria-hidden
-            className="hidden size-8 dark:block"
-          />
-          {APP_NAME}
-        </Link>
-      </div>
-
-      <nav className="flex-1 overflow-y-auto px-2 py-3">
-        {proj ? (
-          <>
-            <div className="group mb-1 flex items-center gap-1 px-1">
-              <Link
-                to={projectPath(proj.slug)}
-                onClick={onCloseDrawer}
-                className={cn(
-                  "flex min-w-0 flex-1 items-center rounded-md px-1.5 py-1 text-sm font-bold tracking-tight hover:bg-sidebar-accent gap-2",
-                )}
-              >
-                <ProjectGlyph
-                  project={proj}
-                  visibility={visOf(proj)}
-                  className="size-4 shrink-0 text-muted-foreground"
-                />
-                <span className="min-w-0 flex-1 truncate text-base">
-                  {proj.name}
-                </span>
-              </Link>
-              <ActionsMenu actions={projectMenu(proj)} />
-            </div>
-            {renderTree(proj, canEdit)}
-
-            {proj.is_workspace && (
-              <div className="mt-5">
-                <div className="mb-1 flex items-center gap-1 pr-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Link
-                        to={notesPath(proj.slug)}
-                        onClick={onCloseDrawer}
-                        aria-label="All quick notes"
-                        className="group flex h-7 flex-1 items-center gap-1.5 rounded-md px-1.5 hover:bg-sidebar-accent"
-                      >
-                        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase group-hover:text-foreground">
-                          Quick notes
-                        </span>
-                        <ArrowRight className="size-3.5 text-muted-foreground group-hover:text-foreground" />
-                      </Link>
-                    </TooltipTrigger>
-                    <TooltipContent>All quick notes</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={() => void onNewQuickNote(proj)}
-                        aria-label="New quick note"
-                        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm shadow-primary/20 transition-colors hover:bg-primary/90"
-                      >
-                        <Plus className="size-4.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>New quick note</TooltipContent>
-                  </Tooltip>
-                </div>
-                {quickNotes.length === 0 ? (
-                  <div className="px-3 py-2 text-center text-xs text-muted-foreground">
-                    No quick notes yet
-                  </div>
-                ) : (
-                  <>
-                    {quickNotes.slice(0, 4).map((n) => {
-                      const active = activeNoteId === n.slug;
-                      return (
-                        <Link
-                          key={n.id}
-                          to={notePath(proj.slug, n.slug)}
-                          onClick={onCloseDrawer}
-                          className={cn(
-                            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                            active
-                              ? "bg-primary/15 font-medium text-foreground"
-                              : "text-sidebar-foreground hover:bg-sidebar-accent",
-                          )}
-                        >
-                          <QuickNoteIcon
-                            className={cn(
-                              "size-3.75 shrink-0",
-                              active ? "text-primary" : "text-muted-foreground",
-                            )}
-                          />
-                          <span className="min-w-0 flex-1 truncate">
-                            {docLabel(n)}
-                          </span>
-                        </Link>
-                      );
-                    })}
-                    {quickNotes.length > 4 && (
-                      <Link
-                        to={notesPath(proj.slug)}
-                        onClick={onCloseDrawer}
-                        className="mt-0.5 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                      >
-                        Show all {quickNotes.length}{" "}
-                        <ArrowRight className="size-3" />
-                      </Link>
-                    )}
-                  </>
-                )}
+      {/* Inner content stays put and only fades (no translate) as the aside collapses its width. The
+          quicker opacity fade masks the width-clip so it reads as a clean fade-out, not a shift. */}
+      <div
+        className={cn(
+          "flex h-full w-80 flex-col transition-opacity duration-200 ease-in-out",
+          sidebarCollapsed && "md:opacity-0",
+        )}
+      >
+        <nav className="flex-1 overflow-y-auto px-2 py-3">
+          {proj ? (
+            <>
+              <div className="group mb-1 flex items-center gap-1 px-1">
+                <Link
+                  to={projectPath(proj.slug)}
+                  onClick={onCloseDrawer}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center rounded-md px-1.5 py-1 text-sm font-bold tracking-tight hover:bg-sidebar-accent gap-2",
+                  )}
+                >
+                  <ProjectGlyph
+                    project={proj}
+                    visibility={visOf(proj)}
+                    className="size-4 shrink-0 text-muted-foreground"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-base">
+                    {proj.name}
+                  </span>
+                </Link>
+                <ActionsMenu actions={projectMenu(proj)} />
               </div>
-            )}
-          </>
-        ) : (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            {user
-              ? "Select a project from the dashboard."
-              : "Sign in to see your workspace."}
-          </div>
-        )}
-      </nav>
+              {renderTree(proj, canEdit)}
 
-      {user && (
-        <div className="shrink-0 border-t border-sidebar-border p-2">
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            onClick={() => void onCreateProject()}
-          >
-            <Plus /> New project
-          </Button>
-        </div>
-      )}
-
-      <div className="shrink-0 border-t border-sidebar-border p-2">
-        {user ? (
-          <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span
-                className="min-w-0 truncate text-sm font-medium"
-                title={user.email ?? undefined}
-              >
-                {user.name || user.email || "Account"}
-              </span>
-              {role === "admin" && <Badge variant="destructive">A</Badge>}
-              {role === "mod" && <Badge>MOD</Badge>}
+              {proj.is_workspace && (
+                <div className="mt-5">
+                  <div className="mb-1 flex items-center gap-1 pr-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link
+                          to={notesPath(proj.slug)}
+                          onClick={onCloseDrawer}
+                          aria-label="All quick notes"
+                          className="group flex h-7 flex-1 items-center gap-1.5 rounded-md px-1.5 hover:bg-sidebar-accent"
+                        >
+                          <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase group-hover:text-foreground">
+                            Quick notes
+                          </span>
+                          <ArrowRight className="size-3.5 text-muted-foreground group-hover:text-foreground" />
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent>All quick notes</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => void onNewQuickNote(proj)}
+                          aria-label="New quick note"
+                          className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm shadow-primary/20 transition-colors hover:bg-primary/90"
+                        >
+                          <Plus className="size-4.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>New quick note</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  {quickNotes.length === 0 ? (
+                    <div className="px-3 py-2 text-center text-xs text-muted-foreground">
+                      No quick notes yet
+                    </div>
+                  ) : (
+                    <>
+                      {quickNotes.slice(0, 4).map((n) => {
+                        const active = activeNoteId === n.slug;
+                        return (
+                          <Link
+                            key={n.id}
+                            to={notePath(proj.slug, n.slug)}
+                            onClick={onCloseDrawer}
+                            className={cn(
+                              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                              active
+                                ? "bg-primary/15 font-medium text-foreground"
+                                : "text-sidebar-foreground hover:bg-sidebar-accent",
+                            )}
+                          >
+                            <QuickNoteIcon
+                              className={cn(
+                                "size-3.75 shrink-0",
+                                active
+                                  ? "text-primary"
+                                  : "text-muted-foreground",
+                              )}
+                            />
+                            <span className="min-w-0 flex-1 truncate">
+                              {docLabel(n)}
+                            </span>
+                          </Link>
+                        );
+                      })}
+                      {quickNotes.length > 4 && (
+                        <Link
+                          to={notesPath(proj.slug)}
+                          onClick={onCloseDrawer}
+                          className="mt-0.5 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                        >
+                          Show all {quickNotes.length}{" "}
+                          <ArrowRight className="size-3" />
+                        </Link>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+              {user
+                ? "Select a project from the dashboard."
+                : "Sign in to see your workspace."}
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 shrink-0 text-muted-foreground"
-                  aria-label="Account menu"
-                >
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" side="top">
-                <DropdownMenuItem
-                  onSelect={() => {
-                    onCloseDrawer();
-                    navigate("/profile");
-                  }}
-                >
-                  <User /> Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    toggle();
-                  }}
-                >
-                  {theme === "dark" ? <Sun /> : <Moon />}
-                  {theme === "dark" ? "Light mode" : "Dark mode"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => void onSignOut()}
-                >
-                  <LogOut /> Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
+          )}
+        </nav>
+
+        {user && (
+          <div className="shrink-0 border-t border-sidebar-border p-2">
             <Button
-              size="sm"
-              className="flex-1"
-              onClick={() => setShowLogin(true)}
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => void onCreateProject()}
             >
-              Sign in
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 shrink-0 text-muted-foreground"
-              onClick={toggle}
-              aria-label="Toggle theme"
-            >
-              {theme === "dark" ? <Sun /> : <Moon />}
+              <Plus /> New project
             </Button>
           </div>
         )}
+
+        <div className="shrink-0 border-t border-sidebar-border p-2">
+          {user ? (
+            <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span
+                  className="min-w-0 truncate text-sm font-medium"
+                  title={user.email ?? undefined}
+                >
+                  {user.name || user.email || "Account"}
+                </span>
+                {role === "admin" && <Badge variant="destructive">A</Badge>}
+                {role === "mod" && <Badge>MOD</Badge>}
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 text-muted-foreground"
+                    aria-label="Account menu"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="top">
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onCloseDrawer();
+                      navigate("/profile");
+                    }}
+                  >
+                    <User /> Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      toggle();
+                    }}
+                  >
+                    {theme === "dark" ? <Sun /> : <Moon />}
+                    {theme === "dark" ? "Light mode" : "Dark mode"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => void onSignOut()}
+                  >
+                    <LogOut /> Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                className="flex-1"
+                onClick={() => setShowLogin(true)}
+              >
+                Sign in
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-9 shrink-0 text-muted-foreground"
+                onClick={toggle}
+                aria-label="Toggle theme"
+              >
+                {theme === "dark" ? <Sun /> : <Moon />}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
