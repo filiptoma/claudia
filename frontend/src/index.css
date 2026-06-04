@@ -236,7 +236,7 @@
 .md h6 {
   /* More breathing room above headings than between paragraphs; the top margin collapses with the
      previous block's bottom margin, so the gap above a heading ≈ this top value. */
-  margin: 1.9rem 0 0.7rem;
+  margin: 2.2rem 0 0.7rem;
   line-height: 1.3;
   letter-spacing: -0.02em;
   font-weight: 750;
