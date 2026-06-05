@@ -7,7 +7,7 @@ import { useTreeActions } from '../hooks/useTreeActions'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { projectVisibility } from '../lib/access'
 import { APP_NAME } from '../lib/brand'
-import { noteSplitPath, projectPath } from '../lib/paths'
+import { noteSplitPath, projectPath, publicProjectsPath } from '../lib/paths'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import ItemCard from './ItemCard'
@@ -48,18 +48,15 @@ export default function Home() {
     [projects, members, uid],
   )
 
-  // Public projects the signed-in user can discover but isn't part of — shown in their own section
-  // below "Projects" so basic users can browse what's shared openly. Exclude ones already in
-  // myProjects (owned/collaborated) to avoid listing the same project twice.
-  const publicProjects = useMemo(
-    () =>
-      uid
-        ? projects.filter(
-            (p) => p.is_public && !p.is_workspace && !myProjects.some((mine) => mine.id === p.id),
-          )
-        : [],
-    [projects, myProjects, uid],
-  )
+  // Public projects the signed-in user can discover but isn't part of.
+  // Sorted by latest updated, capped at 5 for the dashboard preview.
+  const publicProjects = useMemo(() => {
+    if (!uid) return []
+    return projects
+      .filter((p) => p.is_public && !p.is_workspace && !myProjects.some((mine) => mine.id === p.id))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .slice(0, 5)
+  }, [projects, myProjects, uid])
 
   const onCreateProject = async () => {
     const p = await actions.newProject()
@@ -75,6 +72,11 @@ export default function Home() {
   // ----- logged-out landing: the public projects, with a short masthead naming the app. No
   // "Dashboard"/workspace chrome and no sign-in button here — the sidebar owns sign-in. -----
   if (!user) {
+    // Sort by latest updated and show at most 5 as a preview.
+    const preview = [...myProjects]
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .slice(0, 5)
+
     return (
       <div className="mx-auto w-full max-w-7xl px-8 pt-12 pb-24 max-md:px-5 max-md:pt-14">
         <header className="border-b border-border pb-8">
@@ -93,21 +95,31 @@ export default function Home() {
             hint="There are no public projects to explore right now."
           />
         ) : (
-          <div className={`${GRID} mt-8`}>
-            {myProjects.map((p: Project) => {
-              const count = documents.filter((d) => d.project_id === p.id).length
-              const visibility = projectVisibility(p, memberCount.get(p.id) ?? 0)
-              return (
-                <ItemCard
-                  key={p.id}
-                  icon={<ProjectGlyph project={p} visibility={visibility} />}
-                  title={p.name}
-                  meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
-                  onOpen={() => navigate(projectPath(p.slug))}
-                />
-              )
-            })}
-          </div>
+          <>
+            <div className={`${GRID} mt-8`}>
+              {preview.map((p: Project) => {
+                const count = documents.filter((d) => d.project_id === p.id).length
+                const visibility = projectVisibility(p, memberCount.get(p.id) ?? 0)
+                return (
+                  <ItemCard
+                    key={p.id}
+                    icon={<ProjectGlyph project={p} visibility={visibility} />}
+                    title={p.name}
+                    meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
+                    onOpen={() => navigate(projectPath(p.slug))}
+                  />
+                )
+              })}
+            </div>
+            <div className="mt-6 text-center">
+              <Link
+                to={publicProjectsPath()}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-accent2 hover:underline"
+              >
+                Browse all public projects <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
+          </>
         )}
       </div>
     )
@@ -208,9 +220,17 @@ export default function Home() {
 
       {publicProjects.length > 0 && (
         <section className="mt-10">
-          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-            <Globe className="size-3.5" /> Public Projects
-          </h2>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+              <Globe className="size-3.5" /> Public Projects
+            </h2>
+            <Link
+              to={publicProjectsPath()}
+              className="flex items-center gap-1 text-xs font-medium text-accent2 hover:underline"
+            >
+              See all <ArrowRight className="size-3" />
+            </Link>
+          </div>
           <div className={GRID}>
             {publicProjects.map((p: Project) => {
               const count = documents.filter((d) => d.project_id === p.id).length

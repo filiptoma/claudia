@@ -4,8 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeSlug from 'rehype-slug'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
+import type { PluggableList } from 'unified'
+import rehypeSourceSpans from '../lib/sourceSpans'
 import { STORAGE_PREFIX } from '../lib/storage'
 import { preprocessImageSizes, readSizeFragment } from '../lib/mdImage'
 import MdImage from './MdImage'
@@ -99,6 +104,7 @@ export default function Markdown({
   onToggleTask,
   onResizeImage,
   scrollRoot,
+  annotate = false,
 }: {
   children: string
   images?: Record<string, string>
@@ -111,6 +117,9 @@ export default function Markdown({
   /** The scrollable container for in-page `#` anchor jumps. If omitted, the nearest scrollable
    *  ancestor is used. Passing it explicitly (the editor's preview pane) avoids any ambiguity. */
   scrollRoot?: () => HTMLElement | null
+  /** Stamp source-offset spans (`<span class="sp" data-s data-e>`) onto rendered text runs so a
+   *  selection can be mapped back to the markdown source. Used by the view-mode annotation layer. */
+  annotate?: boolean
 }) {
   const navigate = useNavigate()
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
@@ -124,6 +133,16 @@ export default function Markdown({
 
   // Preprocess HackMD `=WIDTHx` size hints into a parseable URL fragment before rendering.
   const source = useMemo(() => preprocessImageSizes(children), [children])
+
+  // rehypeSourceSpans runs last (after highlight/katex) so it only wraps real prose text runs —
+  // synthesized nodes from those plugins carry no source position and are skipped.
+  const rehypePlugins = useMemo<PluggableList>(
+    () =>
+      annotate
+        ? [rehypeSlug, [rehypeHighlight, { detect: false, ignoreMissing: true }], rehypeKatex, rehypeSourceSpans]
+        : [rehypeSlug, [rehypeHighlight, { detect: false, ignoreMissing: true }], rehypeKatex],
+    [annotate],
+  )
 
   // Delegated link handling on the wrapper (robust regardless of how react-markdown renders anchors):
   //  • `#slug`  → scroll that heading to the top of its OWN scroll container (the preview/read panel),
@@ -170,10 +189,10 @@ export default function Markdown({
   return (
     <div className={cn('md', className)} onClick={onClick}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
         // detect:false → fenced blocks without a language stay plain text (no mis-highlighting);
         // only blocks with an explicit, known language get colored.
-        rehypePlugins={[rehypeSlug, [rehypeHighlight, { detect: false, ignoreMissing: true }]]}
+        rehypePlugins={rehypePlugins}
         components={components}
         urlTransform={urlTransform}
       >

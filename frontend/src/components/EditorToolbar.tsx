@@ -26,6 +26,7 @@ import {
   AlignCenter,
   AlignRight,
   Ban,
+  Sigma,
 } from 'lucide-react'
 import type { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
@@ -155,6 +156,27 @@ const insertBlock =
     })
   }
 
+const insertMath: Cmd = (view) => {
+  view.focus()
+  view.dispatch(
+    view.state.changeByRange((range) => {
+      const text = view.state.sliceDoc(range.from, range.to)
+      if (text) {
+        const insert = `$${text}$`
+        return {
+          changes: { from: range.from, to: range.to, insert },
+          range: EditorSelection.range(range.from + 1, range.from + 1 + text.length),
+        }
+      }
+      const insert = '$$\n\n$$'
+      return {
+        changes: { from: range.from, to: range.to, insert },
+        range: EditorSelection.cursor(range.from + 3),
+      }
+    }),
+  )
+}
+
 const TABLE_TEMPLATE =
   '| Column 1 | Column 2 | Column 3 |\n| -------- | -------- | -------- |\n| Text     | Text     | Text     |'
 
@@ -171,6 +193,7 @@ const BASE_BUTTONS: ButtonDef[] = [
   { title: 'Bullet list', Icon: List, cmd: prefixLines(() => '- ') },
   { title: 'Numbered list', Icon: ListOrdered, cmd: prefixLines((i) => `${i + 1}. `) },
   { title: 'Quote', Icon: Quote, cmd: prefixLines(() => '> ') },
+  { title: 'Math', Icon: Sigma, cmd: insertMath },
 ]
 
 const INSERT_BUTTONS: ButtonDef[] = [

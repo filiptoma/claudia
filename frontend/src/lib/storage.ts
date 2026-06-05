@@ -36,6 +36,27 @@ export function extractStoragePaths(content: string): string[] {
   return [...set]
 }
 
+const AVATAR_BUCKET = 'avatars'
+const AVATAR_ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024 // 2 MB
+
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  if (!AVATAR_ALLOWED_TYPES.includes(file.type)) {
+    throw new Error('Only PNG, JPEG, WebP, or GIF images can be used as avatars.')
+  }
+  if (file.size > AVATAR_MAX_BYTES) {
+    throw new Error('Avatar image is too large (max 2 MB).')
+  }
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const path = `${userId}/avatar.${ext}`
+  const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, file, {
+    contentType: file.type,
+    upsert: true, // replace any existing avatar
+  })
+  if (error) throw new Error(error.message)
+  return supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl
+}
+
 // Batch-resolve storage paths to short-lived signed URLs (private bucket).
 export async function signImages(paths: string[]): Promise<Record<string, string>> {
   if (paths.length === 0) return {}

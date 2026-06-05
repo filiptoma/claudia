@@ -150,7 +150,7 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
           </>
         )}
 
-        <form className="flex flex-col gap-3" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <form className="flex flex-col gap-3" onSubmit={handleSubmit(onSubmit)} noValidate autoComplete="on">
           {tab === 'register' && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="auth-name">Name</Label>

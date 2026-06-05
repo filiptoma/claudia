@@ -18,7 +18,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 import { useTree } from "../hooks/useTree";
 import { useTreeActions } from "../hooks/useTreeActions";
 import { useRouteContext } from "../hooks/useRouteContext";
@@ -55,6 +57,7 @@ import astroLogoWhite from "../assets/astro-white.svg";
 import ModeSwitch from "./ModeSwitch";
 import type { Mode } from "./ModeSwitch";
 import SaveIndicator from "./SaveIndicator";
+import ProfileAvatar from "./ProfileAvatar";
 import {
   DocIcon,
   FolderGlyph,
@@ -81,6 +84,38 @@ export default function AppHeader() {
       project ? members.filter((m) => m.project_id === project.id).length : 0,
     [members, project],
   );
+
+  // Fetch the owner's public profile for public projects (shown as avatar on the right of the header).
+  const ownerQuery = useQuery({
+    queryKey: ["public-profile", project?.owner ?? null],
+    enabled: !!(project?.is_public && !project.is_workspace && project.owner),
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      if (!project?.owner) return null;
+      const { data } = await supabase.rpc("get_public_profile", {
+        p_user: project.owner,
+      });
+      return (
+        (
+          data as
+            | { id: string; name: string | null; avatar_url: string | null }[]
+            | null
+        )?.[0] ?? null
+      );
+    },
+  });
+
+  const ownerAvatar =
+    project?.is_public && !project.is_workspace && project.owner ? (
+      <ProfileAvatar
+        userId={project.owner}
+        name={ownerQuery.data?.name ?? null}
+        email={null}
+        avatarUrl={ownerQuery.data?.avatar_url ?? null}
+        variant="tooltip"
+        size="sm"
+      />
+    ) : null;
 
   // The ModeSwitch only renders for editors, who default to split. We set the param explicitly (no
   // delete-on-view) so that switching to View sticks — an absent param now means split, not view.
@@ -202,11 +237,17 @@ export default function AppHeader() {
     // Logged-out visitors see the public landing ("Home"); signed-in users get their "Dashboard".
     let items: Crumb[] = [{ label: uid ? "Dashboard" : "Home" }];
     if (location.pathname === "/profile") items = [{ label: "Profile" }];
+    else if (location.pathname.startsWith("/users/")) items = [{ label: "Public profile" }];
+    else if (location.pathname === "/explore") items = [{ label: "Public projects" }];
+    else if (location.pathname === "/bug") items = [{ label: "Report a bug" }];
+    else if (location.pathname === "/request") items = [{ label: "Feature request" }];
     else if (location.pathname === "/admin") items = [{ label: "Admin" }];
     else if (location.pathname === "/admin/users")
       items = [{ label: "Admin", to: "/admin" }, { label: "Users" }];
     else if (location.pathname === "/admin/projects")
       items = [{ label: "Admin", to: "/admin" }, { label: "All projects" }];
+    else if (location.pathname === "/admin/feedback")
+      items = [{ label: "Admin", to: "/admin" }, { label: "Feedback" }];
     return <HeaderShell items={items} />;
   }
 
@@ -237,7 +278,12 @@ export default function AppHeader() {
 
   // ----- /:project/settings -----
   if (isSettings) {
-    return <HeaderShell items={[projectCrumb, { label: "Settings" }]} />;
+    return (
+      <HeaderShell
+        items={[projectCrumb, { label: "Settings" }]}
+        actions={ownerAvatar}
+      />
+    );
   }
 
   // ----- document view -----
@@ -285,15 +331,20 @@ export default function AppHeader() {
       <HeaderShell
         items={items}
         actions={
-          canEdit ? (
+          (canEdit || ownerAvatar) ? (
             <>
-              <SaveIndicator />
-              <ModeSwitch mode={mode} onChange={setMode} />
-              <ActionsMenu
-                alwaysVisible
-                label="Document actions"
-                actions={menu}
-              />
+              {canEdit && (
+                <>
+                  <SaveIndicator />
+                  <ModeSwitch mode={mode} onChange={setMode} />
+                  <ActionsMenu
+                    alwaysVisible
+                    label="Document actions"
+                    actions={menu}
+                  />
+                </>
+              )}
+              {ownerAvatar}
             </>
           ) : null
         }
@@ -338,27 +389,32 @@ export default function AppHeader() {
       <HeaderShell
         items={items}
         actions={
-          canEdit ? (
+          (canEdit || ownerAvatar) ? (
             <>
-              {!folderEmpty && (
-                <CreateMenu
-                  actions={[
-                    {
-                      label: "New document",
-                      icon: <FilePlus />,
-                      onSelect: async () => {
-                        const d = await actions.newDocument(project, folder.id);
-                        if (d) navigate(docSplitPath(project.slug, d, folders));
-                      },
-                    },
-                  ]}
-                />
+              {canEdit && (
+                <>
+                  {!folderEmpty && (
+                    <CreateMenu
+                      actions={[
+                        {
+                          label: "New document",
+                          icon: <FilePlus />,
+                          onSelect: async () => {
+                            const d = await actions.newDocument(project, folder.id);
+                            if (d) navigate(docSplitPath(project.slug, d, folders));
+                          },
+                        },
+                      ]}
+                    />
+                  )}
+                  <ActionsMenu
+                    alwaysVisible
+                    label="Folder actions"
+                    actions={menu}
+                  />
+                </>
               )}
-              <ActionsMenu
-                alwaysVisible
-                label="Folder actions"
-                actions={menu}
-              />
+              {ownerAvatar}
             </>
           ) : null
         }
@@ -443,14 +499,19 @@ export default function AppHeader() {
     <HeaderShell
       items={[projectCrumb]}
       actions={
-        canEdit ? (
+        (canEdit || ownerAvatar) ? (
           <>
-            {!projectEmpty && <CreateMenu actions={createActions} />}
-            <ActionsMenu
-              alwaysVisible
-              label="Project actions"
-              actions={overflow}
-            />
+            {canEdit && (
+              <>
+                {!projectEmpty && <CreateMenu actions={createActions} />}
+                <ActionsMenu
+                  alwaysVisible
+                  label="Project actions"
+                  actions={overflow}
+                />
+              </>
+            )}
+            {ownerAvatar}
           </>
         ) : null
       }

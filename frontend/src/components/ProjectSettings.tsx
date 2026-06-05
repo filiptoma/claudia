@@ -7,6 +7,7 @@ import { Globe, Lock, Trash2, UserPlus } from 'lucide-react'
 import {
   addMember,
   findUserByEmail,
+  getProjectOwner,
   listProjectMembers,
   removeMember,
   setProjectPublic,
@@ -29,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import QuerySuspense from './QuerySuspense'
+import ProfileAvatar from './ProfileAvatar'
 import { cn } from '@/lib/utils'
 import type { MemberInfo, MemberRole } from '../lib/types'
 
@@ -78,6 +80,7 @@ export default function ProjectSettings() {
 
   const [isPublic, setIsPublic] = useState(false)
   const [members, setMembers] = useState<MemberInfo[] | null>(null)
+  const [owner, setOwner] = useState<{ id: string; name: string | null; email: string | null; avatar_url: string | null } | null>(null)
   const [inviteRole, setInviteRole] = useState<MemberRole>('viewer')
   const [busy, setBusy] = useState(false)
 
@@ -96,6 +99,12 @@ export default function ProjectSettings() {
   useEffect(() => {
     if (projectId) listProjectMembers(projectId).then(setMembers).catch(() => setMembers([]))
   }, [projectId])
+
+  useEffect(() => {
+    if (projectId && project?.owner) {
+      getProjectOwner(projectId).then(setOwner).catch(() => setOwner(null))
+    }
+  }, [projectId, project?.owner])
 
   const guard = async (fn: () => Promise<void>) => {
     setBusy(true)
@@ -168,6 +177,22 @@ export default function ProjectSettings() {
               Manage who can see and edit “{project.name}”.
             </p>
 
+            {owner && (
+              <section className="mb-8">
+                <h2 className="mb-3 text-sm font-semibold">Owner</h2>
+                <div className="rounded-xl border border-border bg-card px-4 py-3">
+                  <ProfileAvatar
+                    userId={owner.id}
+                    name={owner.name}
+                    email={owner.email}
+                    avatarUrl={owner.avatar_url}
+                    variant="inline"
+                    size="md"
+                  />
+                </div>
+              </section>
+            )}
+
             <section className="mb-8">
               <h2 className="mb-3 text-sm font-semibold">General access</h2>
               <div
@@ -221,7 +246,15 @@ export default function ProjectSettings() {
                     key={m.user_id}
                     className="flex items-center gap-2.5 border-b border-border px-3 py-2.5 last:border-b-0"
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm">{m.name || m.email || m.user_id}</span>
+                    <ProfileAvatar
+                      userId={m.user_id}
+                      name={m.name}
+                      email={m.email}
+                      avatarUrl={null}
+                      variant="inline"
+                      size="sm"
+                      className="min-w-0 flex-1"
+                    />
                     <RoleSelect value={m.role} disabled={busy} onChange={(r) => void changeRole(m.user_id, r)} />
                     <Tooltip>
                       <TooltipTrigger asChild>

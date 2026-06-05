@@ -44,6 +44,17 @@ export function docPathFromTree(
   return docPath(projectSlug, folder?.slug ?? null, doc.slug)
 }
 
+export const publicProjectsPath = (params?: { owner?: string; search?: string }) => {
+  if (!params) return '/explore'
+  const q = new URLSearchParams()
+  if (params.owner) q.set('owner', params.owner)
+  if (params.search) q.set('search', params.search)
+  const qs = q.toString()
+  return qs ? `/explore?${qs}` : '/explore'
+}
+
+export const userProfilePath = (userId: string) => `/users/${userId}`
+
 // Path that opens a document straight into split (edit + preview) mode — used right after creating a
 // document or quick note so the author lands in the editor, not the read-only view.
 export const docSplitPath = (

@@ -17,6 +17,7 @@ import {
   User,
 } from "lucide-react";
 import LoginModal from "./LoginModal";
+import ProfileAvatar from "./ProfileAvatar";
 import ActionsMenu from "./ActionsMenu";
 import type { MenuAction } from "./ActionsMenu";
 import {
@@ -495,12 +496,15 @@ export default function Sidebar({
           {user ? (
             <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                <span
-                  className="min-w-0 truncate text-sm font-medium"
-                  title={user.email ?? undefined}
-                >
-                  {user.name || user.email || "Account"}
-                </span>
+                <ProfileAvatar
+                  userId={user.id}
+                  name={user.name}
+                  email={user.email}
+                  avatarUrl={user.avatar_url}
+                  variant="inline"
+                  size="sm"
+                  isSelf
+                />
                 {role === "admin" && <Badge variant="destructive">A</Badge>}
                 {role === "mod" && <Badge>MOD</Badge>}
               </div>

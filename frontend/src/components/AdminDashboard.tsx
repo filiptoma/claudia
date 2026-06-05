@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { ArrowRight, Layers, Users } from 'lucide-react'
+import { ArrowRight, Layers, MessageSquare, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
@@ -58,6 +58,12 @@ export default function AdminDashboard() {
             description="View accounts and roles."
           />
         )}
+        <DashLink
+          to="/admin/feedback"
+          icon={<MessageSquare />}
+          title="Feedback"
+          description="Bug reports and feature requests."
+        />
       </div>
     </div>
   )

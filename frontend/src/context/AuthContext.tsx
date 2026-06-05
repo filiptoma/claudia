@@ -17,6 +17,7 @@ interface AuthCtx {
   loginOAuth: (provider: 'google' | 'github') => Promise<void>
   register: (data: { email: string; password: string; name: string }) => Promise<{ needsConfirmation: boolean }>
   logout: () => Promise<void>
+  refreshProfile: () => Promise<void>
 }
 
 const Ctx = createContext<AuthCtx | null>(null)
@@ -108,6 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async logout() {
         await supabase.auth.signOut()
+      },
+      async refreshProfile() {
+        if (!uid) return
+        const { data } = await supabase.from('profiles').select('*').eq('id', uid).single()
+        if (data) setUser(data as Profile)
       },
     }
   }, [user, uid, loading])

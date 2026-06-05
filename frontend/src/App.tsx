@@ -9,9 +9,14 @@ import ProjectSettings from './components/ProjectSettings'
 import AdminDashboard from './components/AdminDashboard'
 import AdminUsers from './components/AdminUsers'
 import AdminProjects from './components/AdminProjects'
+import AdminFeedback from './components/AdminFeedback'
 import QuickNotesPage from './components/QuickNotesPage'
 import QuickNoteDetail from './components/QuickNoteDetail'
 import Profile from './components/Profile'
+import UserProfilePage from './components/UserProfilePage'
+import PublicProjectsPage from './components/PublicProjectsPage'
+import BugPage from './components/BugPage'
+import RequestPage from './components/RequestPage'
 import { FullPageSpinner } from './components/ui/spinner'
 import { useAuth } from './context/AuthContext'
 import { fetchDocument, treeKeys, useTree } from './hooks/useTree'
@@ -50,9 +55,14 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/explore" element={<PublicProjectsPage />} />
+            <Route path="/users/:userId" element={<UserProfilePage />} />
+            <Route path="/bug" element={<BugPage />} />
+            <Route path="/request" element={<RequestPage />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/projects" element={<AdminProjects />} />
+            <Route path="/admin/feedback" element={<AdminFeedback />} />
             <Route path="/:projectSlug" element={<ProjectScreen />} />
             <Route path="/:projectSlug/settings" element={<ProjectSettings />} />
             <Route path="/:projectSlug/notes" element={<QuickNotesPage />} />

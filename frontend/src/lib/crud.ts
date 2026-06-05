@@ -2,7 +2,19 @@ import { customAlphabet } from 'nanoid'
 import { supabase } from './supabase'
 import { nextOrder } from './order'
 import { slugify } from './slug'
-import type { DocumentRec, Folder, MemberInfo, MemberRole, Project } from './types'
+import type {
+  Anchor,
+  CommentMessage,
+  CommentThread,
+  DocumentRec,
+  Folder,
+  MemberInfo,
+  MemberRole,
+  MentionableUser,
+  Project,
+  SuggestionMessage,
+  SuggestionThread,
+} from './types'
 
 type Table = 'projects' | 'folders' | 'documents'
 
@@ -166,5 +178,169 @@ export async function removeMember(projectId: string, userId: string): Promise<v
     .delete()
     .eq('project_id', projectId)
     .eq('user_id', userId)
+  if (error) throw new Error(error.message)
+}
+
+export async function getProjectOwner(
+  projectId: string,
+): Promise<{ id: string; name: string | null; email: string | null; avatar_url: string | null } | null> {
+  const { data, error } = await supabase.rpc('get_project_owner', { p_project: projectId })
+  if (error) throw new Error(error.message)
+  return (
+    (data as { id: string; name: string | null; email: string | null; avatar_url: string | null }[] | null)?.[0] ?? null
+  )
+}
+
+export async function submitFeedback(payload: {
+  type: 'bug' | 'request'
+  title: string
+  description: string
+  email: string | null
+  userId: string | null
+}): Promise<void> {
+  const { error } = await supabase.from('feedback').insert({
+    type: payload.type,
+    title: payload.title,
+    description: payload.description,
+    email: payload.email || null,
+    user_id: payload.userId,
+  })
+  if (error) throw new Error(error.message)
+}
+
+// ---- inline comments & suggested edits ----
+// Reads go through SECURITY DEFINER RPCs (they join author/resolver profile info, which is otherwise
+// private); single-row writes use RLS-gated table ops; thread creation + approval use atomic RPCs.
+
+// Owner + members of a project — the @mention candidate list. Callable by anyone with view access.
+export async function listMentionableUsers(projectId: string): Promise<MentionableUser[]> {
+  const { data, error } = await supabase.rpc('list_mentionable_users', { p_project: projectId })
+  if (error) throw new Error(error.message)
+  return (data as MentionableUser[] | null) ?? []
+}
+
+export async function listDocumentCommentThreads(documentId: string): Promise<CommentThread[]> {
+  const { data, error } = await supabase.rpc('list_document_comment_threads', { p_document: documentId })
+  if (error) throw new Error(error.message)
+  return (data as CommentThread[] | null) ?? []
+}
+
+export async function listDocumentComments(documentId: string): Promise<CommentMessage[]> {
+  const { data, error } = await supabase.rpc('list_document_comments', { p_document: documentId })
+  if (error) throw new Error(error.message)
+  return (data as CommentMessage[] | null) ?? []
+}
+
+// Creates the thread + its first message atomically; returns the new thread id.
+export async function createCommentThread(input: {
+  documentId: string
+  anchor: Anchor
+  sourceStart: number
+  sourceEnd: number
+  body: string
+  mentions: string[]
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_comment_thread', {
+    p_document: input.documentId,
+    p_anchor: input.anchor,
+    p_source_start: input.sourceStart,
+    p_source_end: input.sourceEnd,
+    p_body: input.body,
+    p_mentions: input.mentions,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+export async function addComment(threadId: string, author: string, body: string, mentions: string[]): Promise<void> {
+  const { error } = await supabase.from('comments').insert({ thread_id: threadId, author, body, mentions })
+  if (error) throw new Error(error.message)
+}
+
+// Resolve/unresolve a thread. resolvedBy/resolvedAt are cleared on unresolve.
+export async function setThreadResolved(threadId: string, resolved: boolean, resolvedBy: string): Promise<void> {
+  const { error } = await supabase
+    .from('comment_threads')
+    .update({
+      resolved,
+      resolved_by: resolved ? resolvedBy : null,
+      resolved_at: resolved ? new Date().toISOString() : null,
+    })
+    .eq('id', threadId)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteCommentThread(threadId: string): Promise<void> {
+  const { error } = await supabase.from('comment_threads').delete().eq('id', threadId)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteComment(id: string): Promise<void> {
+  const { error } = await supabase.from('comments').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function listDocumentSuggestions(documentId: string): Promise<SuggestionThread[]> {
+  const { data, error } = await supabase.rpc('list_document_suggestions', { p_document: documentId })
+  if (error) throw new Error(error.message)
+  return (data as SuggestionThread[] | null) ?? []
+}
+
+export async function listDocumentSuggestionComments(documentId: string): Promise<SuggestionMessage[]> {
+  const { data, error } = await supabase.rpc('list_document_suggestion_comments', { p_document: documentId })
+  if (error) throw new Error(error.message)
+  return (data as SuggestionMessage[] | null) ?? []
+}
+
+export async function createSuggestion(input: {
+  documentId: string
+  anchor: Anchor
+  sourceStart: number
+  sourceEnd: number
+  originalMd: string
+  suggestedMd: string
+  note: string
+  mentions: string[]
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_suggestion', {
+    p_document: input.documentId,
+    p_anchor: input.anchor,
+    p_source_start: input.sourceStart,
+    p_source_end: input.sourceEnd,
+    p_original_md: input.originalMd,
+    p_suggested_md: input.suggestedMd,
+    p_note: input.note,
+    p_mentions: input.mentions,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+export async function addSuggestionComment(
+  suggestionId: string,
+  author: string,
+  body: string,
+  mentions: string[],
+): Promise<void> {
+  const { error } = await supabase
+    .from('suggestion_comments')
+    .insert({ suggestion_id: suggestionId, author, body, mentions })
+  if (error) throw new Error(error.message)
+}
+
+// Approve: atomic apply-then-delete (RPC re-checks edit access + that the source is unchanged).
+export async function approveSuggestion(suggestionId: string): Promise<void> {
+  const { error } = await supabase.rpc('apply_suggestion', { p_suggestion: suggestionId })
+  if (error) throw new Error(error.message)
+}
+
+// Reject (or the author withdrawing): deleting the thread cascade-removes its replies.
+export async function rejectSuggestion(suggestionId: string): Promise<void> {
+  const { error } = await supabase.from('suggestion_threads').delete().eq('id', suggestionId)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteSuggestionComment(id: string): Promise<void> {
+  const { error } = await supabase.from('suggestion_comments').delete().eq('id', id)
   if (error) throw new Error(error.message)
 }
