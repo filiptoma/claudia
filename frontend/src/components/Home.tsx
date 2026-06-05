@@ -48,6 +48,19 @@ export default function Home() {
     [projects, members, uid],
   )
 
+  // Public projects the signed-in user can discover but isn't part of — shown in their own section
+  // below "Projects" so basic users can browse what's shared openly. Exclude ones already in
+  // myProjects (owned/collaborated) to avoid listing the same project twice.
+  const publicProjects = useMemo(
+    () =>
+      uid
+        ? projects.filter(
+            (p) => p.is_public && !p.is_workspace && !myProjects.some((mine) => mine.id === p.id),
+          )
+        : [],
+    [projects, myProjects, uid],
+  )
+
   const onCreateProject = async () => {
     const p = await actions.newProject()
     if (p) navigate(projectPath(p.slug))
@@ -192,6 +205,29 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {publicProjects.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+            <Globe className="size-3.5" /> Public Projects
+          </h2>
+          <div className={GRID}>
+            {publicProjects.map((p: Project) => {
+              const count = documents.filter((d) => d.project_id === p.id).length
+              const visibility = projectVisibility(p, memberCount.get(p.id) ?? 0)
+              return (
+                <ItemCard
+                  key={p.id}
+                  icon={<ProjectGlyph project={p} visibility={visibility} />}
+                  title={p.name}
+                  meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
+                  onOpen={() => navigate(projectPath(p.slug))}
+                />
+              )
+            })}
+          </div>
+        </section>
+      )}
     </div>
   )
 }
