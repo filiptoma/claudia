@@ -178,6 +178,14 @@
     "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* Disable all CSS transitions and animations on mobile — taps should feel instant. */
+@media (max-width: 767px) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

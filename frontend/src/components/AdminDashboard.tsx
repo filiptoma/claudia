@@ -3,6 +3,9 @@ import { Link, Navigate } from 'react-router-dom'
 import { ArrowRight, Layers, MessageSquare, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import { useIsMobile } from '../hooks/useIsMobile'
+import PageLayout from './PageLayout'
+import PageHeader from './PageHeader'
 
 function DashLink({
   to,
@@ -35,13 +38,13 @@ function DashLink({
 // Staff (mod + admin) landing page. Admins additionally manage users; both manage all projects.
 export default function AdminDashboard() {
   const { isStaff, isAdmin } = useAuth()
+  const isMobile = useIsMobile()
   useDocumentTitle('Admin')
-  if (!isStaff) return <Navigate to="/" replace />
+  if (!isStaff || isMobile) return <Navigate to="/" replace />
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-8 pt-10 pb-20 max-md:px-5 max-md:pt-14">
-      <h1 className="mb-1 text-2xl font-bold tracking-tight">Admin</h1>
-      <p className="mb-6 text-sm text-muted-foreground">Manage the workspace.</p>
+    <PageLayout variant="medium">
+      <PageHeader title="Admin" description="Manage the workspace." />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <DashLink
@@ -65,6 +68,6 @@ export default function AdminDashboard() {
           description="Bug reports and feature requests."
         />
       </div>
-    </div>
+    </PageLayout>
   )
 }

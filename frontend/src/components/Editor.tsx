@@ -1,4 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { useIsMobile } from '../hooks/useIsMobile'
 import type { ChangeEvent, RefObject } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import type { BasicSetupOptions, ReactCodeMirrorRef } from '@uiw/react-codemirror'
@@ -131,9 +133,14 @@ export default function Editor({
   onContentChange?: (content: string) => void
 }) {
   const { theme } = useTheme()
+  const isMobile = useIsMobile()
   const qc = useQueryClient()
   const cmRef = useRef<ReactCodeMirrorRef>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [toolbarOpen, setToolbarOpen] = useState(!isMobile)
+  // Keep toolbar state in sync when viewport crosses the mobile breakpoint.
+  useEffect(() => { setToolbarOpen(!isMobile) }, [isMobile])
 
   // Captured once (state initializer) so CodeMirror's value never resets on cache updates.
   const [initialValue] = useState(doc.content)
@@ -590,18 +597,48 @@ export default function Editor({
     // The toolbar spans the full width above BOTH panes so the source and rendered content line up at
     // the same y (it used to sit inside the left pane only, shifting the preview up relative to it).
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center border-b border-border bg-card/40 px-2.5 py-1.5">
-        <EditorToolbar
-          getView={() => cmRef.current?.view ?? null}
-          onImageClick={() => fileInputRef.current?.click()}
-          onRefClick={handleRefClick}
-          inTable={inTable}
-          inImage={inImage}
-          imageWidth={imageWidth}
-          onImageWider={() => stepImageWidth(1)}
-          onImageNarrower={() => stepImageWidth(-1)}
-          onImageResetSize={resetImageWidth}
-        />
+      <div className="shrink-0 border-b border-border bg-card/40">
+        {isMobile ? (
+          <>
+            <button
+              className="flex h-12 w-full items-center justify-between px-4 text-sm font-medium text-muted-foreground active:bg-card/80"
+              onClick={() => setToolbarOpen((o) => !o)}
+              aria-label={toolbarOpen ? 'Hide formatting toolbar' : 'Show formatting toolbar'}
+            >
+              <span>Format</span>
+              {toolbarOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            </button>
+            {toolbarOpen && (
+              <div className="overflow-x-auto border-t border-border px-2 pb-2 pt-1">
+                <EditorToolbar
+                  getView={() => cmRef.current?.view ?? null}
+                  onImageClick={() => fileInputRef.current?.click()}
+                  onRefClick={handleRefClick}
+                  inTable={inTable}
+                  inImage={inImage}
+                  imageWidth={imageWidth}
+                  onImageWider={() => stepImageWidth(1)}
+                  onImageNarrower={() => stepImageWidth(-1)}
+                  onImageResetSize={resetImageWidth}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center px-2.5 py-1.5">
+            <EditorToolbar
+              getView={() => cmRef.current?.view ?? null}
+              onImageClick={() => fileInputRef.current?.click()}
+              onRefClick={handleRefClick}
+              inTable={inTable}
+              inImage={inImage}
+              imageWidth={imageWidth}
+              onImageWider={() => stepImageWidth(1)}
+              onImageNarrower={() => stepImageWidth(-1)}
+              onImageResetSize={resetImageWidth}
+            />
+          </div>
+        )}
       </div>
       <div className={cn('flex min-h-0 flex-1', showPreview ? 'max-md:flex-col' : '')}>
         <div

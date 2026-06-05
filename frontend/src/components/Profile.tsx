@@ -7,12 +7,20 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { supabase } from '../lib/supabase'
 import { uploadAvatar } from '../lib/storage'
 import { projectPath, publicProjectsPath } from '../lib/paths'
+import { projectVisibility } from '../lib/access'
 import { toast } from '../lib/toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import ProfileAvatar from './ProfileAvatar'
+import { AvatarCircle } from './ProfileAvatar'
+import ProjectCard from './ProjectCard'
+import { ProjectGlyph } from './EntityIcons'
+import PageLayout from './PageLayout'
+import PageHeader from './PageHeader'
+import SectionHeader from './SectionHeader'
 import type { Project } from '../lib/types'
+
+const GRID = 'grid grid-cols-1 gap-3 sm:grid-cols-2'
 
 export default function Profile() {
   const { user, uid, role, isStaff, isAdmin, loading, logout, refreshProfile } = useAuth()
@@ -66,30 +74,30 @@ export default function Profile() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-8 pt-10 pb-20 max-md:px-5 max-md:pt-14">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight">Profile</h1>
+    <PageLayout variant="medium">
+      <PageHeader title="Profile" />
 
       {/* — identity card — */}
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         {/* avatar + name row */}
         <div className="flex items-center gap-4">
           <div className="relative">
-            <ProfileAvatar
-              userId={user.id}
-              name={user.name}
-              email={user.email}
-              avatarUrl={user.avatar_url}
-              variant="tooltip"
-              size="lg"
-              isSelf
-            />
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
               aria-label="Change avatar"
-              className="absolute -bottom-1 -right-1 flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+              className="group relative block cursor-pointer rounded-full disabled:opacity-50"
             >
-              <Upload className="size-3" />
+              <AvatarCircle
+                userId={user.id}
+                name={user.name}
+                email={user.email}
+                avatarUrl={user.avatar_url}
+                size="lg"
+              />
+              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+                <Upload className="size-4 text-white" />
+              </span>
             </button>
             <input
               ref={fileRef}
@@ -127,17 +135,12 @@ export default function Profile() {
 
       {/* — own public projects preview — */}
       <div className="mt-6">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-            <Globe className="size-3.5" /> My public projects
-          </h2>
-          <Link
-            to={publicProjectsPath({ owner: user.name ?? undefined })}
-            className="flex items-center gap-1 text-xs font-medium text-accent2 hover:underline"
-          >
-            Browse all <ArrowRight className="size-3" />
-          </Link>
-        </div>
+        <SectionHeader
+          icon={<Globe className="size-3.5" />}
+          title="My public projects"
+          to={publicProjectsPath({ owner: user.name ?? undefined })}
+          actionLabel="Browse all"
+        />
 
         {ownPublicProjects === null ? (
           <div className="text-sm text-muted-foreground">Loading…</div>
@@ -146,41 +149,41 @@ export default function Profile() {
             You haven't made any projects public yet.
           </div>
         ) : (
-          <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          <div className={GRID}>
             {ownPublicProjects.map((p) => (
-              <Link
+              <ProjectCard
                 key={p.id}
+                icon={<ProjectGlyph project={p} visibility={projectVisibility(p, 0)} />}
+                title={p.name}
+                meta={new Date(p.updated_at).toLocaleDateString()}
                 to={projectPath(p.slug)}
-                className="flex items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-accent/50"
-              >
-                <Globe className="size-4 shrink-0 text-accent2" />
-                <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {new Date(p.updated_at).toLocaleDateString()}
-                </span>
-              </Link>
+              />
             ))}
           </div>
         )}
       </div>
 
+      {/* — staff section — hidden on mobile (admin dashboard is desktop-only) */}
       {isStaff && (
-        <Link
-          to="/admin"
-          className="group mt-4 flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
-        >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-foreground">
-            <ShieldCheck className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="font-medium">Admin dashboard</div>
-            <div className="text-sm text-muted-foreground">
-              {isAdmin ? 'Manage users and all projects' : 'Manage all projects'}
+        <div className="mt-6 max-md:hidden">
+          <h2 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">Staff</h2>
+          <Link
+            to="/admin"
+            className="group flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-foreground">
+              <ShieldCheck className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">Admin dashboard</div>
+              <div className="text-sm text-muted-foreground">
+                {isAdmin ? 'Manage users and all projects' : 'Manage all projects'}
+              </div>
             </div>
-          </div>
-          <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
-        </Link>
+            <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+          </Link>
+        </div>
       )}
-    </div>
+    </PageLayout>
   )
 }

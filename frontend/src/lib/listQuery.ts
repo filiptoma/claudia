@@ -13,13 +13,14 @@ import type {
 // The PostgREST query builder is heavily generic; we only need the chainable filter/order/range
 // methods here, so we model it with a small structural type whose methods return the same shape.
 // Each method returns a new builder, so callers must reassign (`q = applyFilter(q, f)`).
-type QueryBuilder = {
+export type QueryBuilder = {
   ilike: (column: string, pattern: string) => QueryBuilder
   eq: (column: string, value: unknown) => QueryBuilder
   in: (column: string, values: readonly unknown[]) => QueryBuilder
   gte: (column: string, value: unknown) => QueryBuilder
   lte: (column: string, value: unknown) => QueryBuilder
   lt: (column: string, value: unknown) => QueryBuilder
+  or: (conditions: string) => QueryBuilder
   order: (column: string, options: { ascending: boolean }) => QueryBuilder
   range: (from: number, to: number) => QueryBuilder
 }
@@ -37,7 +38,7 @@ const nextDay = (value: string): string => {
 }
 
 /** Apply a single filter to the builder. Returns the (new) builder so the caller can reassign. */
-function defaultApplyFilter(q: QueryBuilder, filter: Filter): QueryBuilder {
+export function defaultApplyFilter(q: QueryBuilder, filter: Filter): QueryBuilder {
   const { field, type, value } = filter
   if (isEmpty(value)) return q
 

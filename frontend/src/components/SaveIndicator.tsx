@@ -16,24 +16,32 @@ export default function SaveIndicator() {
   if (status === "saving")
     return (
       <span className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" /> Saving…
+        <Loader2 className="size-3.5 animate-spin" />
+        <span className="max-md:hidden">Saving…</span>
       </span>
     );
   if (status === "error")
     return (
-      <button
-        className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-destructive"
-        onClick={() => retry?.()}
-      >
-        <AlertCircle className="size-3.5" /> Save failed — retry
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-destructive"
+            onClick={() => retry?.()}
+          >
+            <AlertCircle className="size-3.5" />
+            <span className="max-md:hidden">Save failed — retry</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Save failed — tap to retry</TooltipContent>
+      </Tooltip>
     );
   if (status === "saved")
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="inline-flex items-center gap-0.5 text-xs whitespace-nowrap text-emerald-600 dark:text-emerald-400">
-            <Check className="size-3.5" /> Saved
+            <Check className="size-3.5" />
+            <span className="max-md:hidden">Saved</span>
           </span>
         </TooltipTrigger>
         <TooltipContent>

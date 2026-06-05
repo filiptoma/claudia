@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useDocument } from '../hooks/useTree'
 import type { DocMeta } from '../hooks/useTree'
+import { useIsMobile } from '../hooks/useIsMobile'
 import QuerySuspense from './QuerySuspense'
 import DocView from './DocView'
 import type { Mode } from './ModeSwitch'
@@ -15,6 +16,7 @@ const Editor = lazy(() => import('./Editor'))
 export default function DocumentBody({ meta, canEdit }: { meta: DocMeta; canEdit: boolean }) {
   const [searchParams] = useSearchParams()
   const docQuery = useDocument(meta.id)
+  const isMobile = useIsMobile()
   const [liveContent, setLiveContent] = useState<string | null>(null)
 
   // Reset transient edit state when switching documents (adjust-state-during-render, no effect).
@@ -24,8 +26,15 @@ export default function DocumentBody({ meta, canEdit }: { meta: DocMeta; canEdit
     setLiveContent(null)
   }
 
-  // Editors land in split mode by default (edit + live preview); viewers always read.
-  const mode: Mode = canEdit ? ((searchParams.get('mode') as Mode) || 'split') : 'view'
+  // Desktop defaults to split. Mobile: quick notes default to edit (they're for quick capture),
+  // regular docs default to view. An explicit ?mode= URL param always wins on mobile.
+  const urlMode = searchParams.get('mode') as Mode | null
+  const mobileDefault: Mode = meta.is_quick_note ? 'edit' : 'view'
+  const mode: Mode = !canEdit
+    ? 'view'
+    : isMobile
+    ? (urlMode === 'view' ? 'view' : urlMode === 'edit' ? 'edit' : mobileDefault)
+    : (urlMode ?? 'split')
   const isEdit = mode !== 'view'
 
   return (
@@ -47,7 +56,7 @@ export default function DocumentBody({ meta, canEdit }: { meta: DocMeta; canEdit
             />
           </Suspense>
         ) : (
-          <div className="mx-auto max-w-205 px-8 pt-7 pb-28 max-md:px-5">
+          <div className="mx-auto max-w-205 px-8 pt-7 pb-28 max-md:px-4 max-md:pt-5">
             <DocView content={liveContent ?? docQuery.data.content} />
           </div>
         ))}

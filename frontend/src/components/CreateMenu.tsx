@@ -24,6 +24,7 @@ export default function CreateMenu({
   size = 'sm',
   className,
   align = 'end',
+  compact = false,
 }: {
   actions: MenuAction[]
   label?: string
@@ -31,16 +32,18 @@ export default function CreateMenu({
   size?: ButtonSize
   className?: string
   align?: 'start' | 'center' | 'end'
+  /** When true, hides the text label — shows only the + icon (and chevron for multi-action menus). */
+  compact?: boolean
 }) {
   if (actions.length === 0) return null
 
-  // A single option needs no menu — show it directly (keeping its own icon and label).
+  // Single option: plain button (no dropdown).
   if (actions.length === 1) {
     const a = actions[0]
     return (
       <Button variant={variant} size={size} className={className} onClick={() => a.onSelect()}>
         {a.icon ?? <Plus />}
-        {a.label}
+        {!compact && a.label}
       </Button>
     )
   }
@@ -50,7 +53,7 @@ export default function CreateMenu({
       <DropdownMenuTrigger asChild>
         <Button variant={variant} size={size} className={className}>
           <Plus />
-          {label}
+          {!compact && label}
           <ChevronDown className="-mr-1 size-3.5 opacity-70" />
         </Button>
       </DropdownMenuTrigger>

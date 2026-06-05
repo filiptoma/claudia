@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { userProfilePath } from '../lib/paths'
 
@@ -35,6 +36,12 @@ const SIZE = {
   lg: 'size-12 text-base',
 }
 
+const SPINNER_SIZE = {
+  sm: 'size-3',
+  md: 'size-3.5',
+  lg: 'size-4',
+}
+
 interface ProfileAvatarProps {
   userId: string
   name: string | null
@@ -48,19 +55,37 @@ interface ProfileAvatarProps {
   size?: 'sm' | 'md' | 'lg'
   /** When true, links to /profile (current user). Otherwise links to /users/:userId. */
   isSelf?: boolean
+  /** When true, renders as a non-interactive display element (no link). */
+  noLink?: boolean
+  /** When true, shows a loading spinner instead of the avatar content. */
+  isLoading?: boolean
   className?: string
 }
 
-function AvatarCircle({
+export function AvatarCircle({
   userId,
   name,
   email,
   avatarUrl,
   size = 'md',
-}: Pick<ProfileAvatarProps, 'userId' | 'name' | 'email' | 'avatarUrl' | 'size'>) {
+  isLoading = false,
+}: Pick<ProfileAvatarProps, 'userId' | 'name' | 'email' | 'avatarUrl' | 'size' | 'isLoading'>) {
   const sizeClass = SIZE[size]
   const bg = colorFor(userId)
   const ini = initials(name, email, userId)
+
+  if (isLoading) {
+    return (
+      <span
+        className={cn(
+          'shrink-0 inline-flex items-center justify-center rounded-full bg-muted ring-1 ring-border',
+          sizeClass,
+        )}
+      >
+        <Spinner className={SPINNER_SIZE[size]} />
+      </span>
+    )
+  }
 
   if (avatarUrl) {
     return (
@@ -97,36 +122,60 @@ export default function ProfileAvatar({
   variant = 'tooltip',
   size = 'md',
   isSelf = false,
+  noLink = false,
+  isLoading = false,
   className,
 }: ProfileAvatarProps) {
   const to = isSelf ? '/profile' : userProfilePath(userId)
   const displayName = name || email || 'Unknown user'
 
   const circle = (
-    <AvatarCircle userId={userId} name={name} email={email} avatarUrl={avatarUrl} size={size} />
+    <AvatarCircle userId={userId} name={name} email={email} avatarUrl={avatarUrl} size={size} isLoading={isLoading} />
   )
 
   if (variant === 'inline') {
+    const nameEl = isLoading ? null : (
+      <span className="min-w-0 truncate text-sm font-medium">{displayName}</span>
+    )
+    if (noLink) {
+      return (
+        <span className={cn('inline-flex w-fit min-w-0 items-center gap-2', className)}>
+          {circle}
+          {nameEl}
+        </span>
+      )
+    }
     return (
       <Link
         to={to}
-        className={cn('flex min-w-0 items-center gap-2 hover:opacity-80 transition-opacity', className)}
+        className={cn('inline-flex w-fit min-w-0 items-center gap-2 hover:opacity-80 transition-opacity', className)}
       >
         {circle}
-        <span className="min-w-0 truncate text-sm font-medium">{displayName}</span>
+        {nameEl}
       </Link>
     )
   }
 
   // tooltip variant
+  if (noLink) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={cn('inline-flex w-fit', className)}>{circle}</span>
+        </TooltipTrigger>
+        <TooltipContent>{isLoading ? 'Loading…' : displayName}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Link to={to} className={cn('hover:opacity-80 transition-opacity', className)}>
+        <Link to={to} className={cn('inline-flex w-fit hover:opacity-80 transition-opacity', className)}>
           {circle}
         </Link>
       </TooltipTrigger>
-      <TooltipContent>{displayName}</TooltipContent>
+      <TooltipContent>{isLoading ? 'Loading…' : displayName}</TooltipContent>
     </Tooltip>
   )
 }

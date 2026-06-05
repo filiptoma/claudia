@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CalendarIcon, Globe, Search, X } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Search, SearchX, X } from 'lucide-react'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
-import { createSupabaseListQuery } from '../lib/listQuery'
-import { projectPath } from '../lib/paths'
+import { createSupabaseListQuery, defaultApplyFilter } from '../lib/listQuery'
 import { List, Pagination } from './data'
 import type { Filter, ListApi, RangeValue } from './data'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import EmptyState from './EmptyState'
-import ProfileAvatar from './ProfileAvatar'
+import PublicProjectCard from './PublicProjectCard'
+import PageLayout from './PageLayout'
+import PageHeader from './PageHeader'
 import type { PublicProject } from '../lib/types'
 import { APP_NAME } from '../lib/brand'
 
@@ -18,9 +21,15 @@ const usePublicProjectsQuery = createSupabaseListQuery<PublicProject>({
   rpc: 'list_public_projects',
   queryKey: 'public-projects',
   defaultSort: [{ field: 'updated_at', dir: 'desc' }],
+  applyFilter: (q, filter) => {
+    if (filter.field === 'name' && filter.type === 'text' && filter.value) {
+      const v = filter.value as string
+      return q.or(`name.ilike.%${v}%,slug.ilike.%${v}%`)
+    }
+    return defaultApplyFilter(q, filter)
+  },
 })
 
-// Typed filter state (easier to bind to form inputs than raw Filter[])
 interface FilterState {
   search: string
   owner: string
@@ -58,7 +67,79 @@ function toFilterList(f: FilterState): Filter[] {
   return out
 }
 
-// ---- Filters UI component ----
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState<T>(value)
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(id)
+  }, [value, delay])
+  return debounced
+}
+
+// ---- Text input with inline clear button ----
+
+function FilterInput({
+  value,
+  onChange,
+  placeholder,
+  icon,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  icon: ReactNode
+}) {
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+        {icon}
+      </span>
+      <Input
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn('pl-8', value ? 'pr-8' : 'pr-3')}
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+          aria-label="Clear"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ---- Date input with external clear button ----
+
+function DateInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-0.5">
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="flex size-7 shrink-0 items-center justify-center rounded p-1 text-muted-foreground hover:text-foreground"
+          aria-label="Clear date"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ---- Date range field ----
 
 function DateRangeField({
   label,
@@ -73,144 +154,101 @@ function DateRangeField({
   onFrom: (v: string) => void
   onTo: (v: string) => void
 }) {
-  const inputCls =
-    'h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50'
   return (
     <div className="flex flex-col gap-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <div className="flex items-center gap-1.5">
-        <div className="relative flex-1">
-          <CalendarIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input type="date" value={from} onChange={(e) => onFrom(e.target.value)} className={inputCls} />
-        </div>
-        <span className="shrink-0 text-xs text-muted-foreground">–</span>
-        <div className="relative flex-1">
-          <CalendarIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input type="date" value={to} onChange={(e) => onTo(e.target.value)} className={inputCls} />
-        </div>
+        <DateInput value={from} onChange={onFrom} />
+        <span className="shrink-0 text-muted-foreground">–</span>
+        <DateInput value={to} onChange={onTo} />
       </div>
     </div>
   )
 }
 
+// ---- Filters bar ----
+
 function FiltersBar({
-  values,
-  onChange,
+  urlFilters,
+  localSearch,
+  localOwner,
+  onLocalSearch,
+  onLocalOwner,
+  onDateFilter,
+  onClear,
 }: {
-  values: FilterState
-  onChange: (f: FilterState) => void
+  urlFilters: FilterState
+  localSearch: string
+  localOwner: string
+  onLocalSearch: (v: string) => void
+  onLocalOwner: (v: string) => void
+  onDateFilter: (key: keyof FilterState, v: string) => void
+  onClear: () => void
 }) {
-  const set = (key: keyof FilterState) => (v: string) => onChange({ ...values, [key]: v })
-  const anyActive = Object.values(values).some((v) => v !== '')
+  const anyActive =
+    localSearch !== '' ||
+    localOwner !== '' ||
+    urlFilters.updatedFrom !== '' ||
+    urlFilters.updatedTo !== '' ||
+    urlFilters.createdFrom !== '' ||
+    urlFilters.createdTo !== ''
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-2">
-          <Label className="text-xs text-muted-foreground">Title</Label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search project titles…"
-              value={values.search}
-              onChange={(e) => set('search')(e.target.value)}
-              className="pl-8"
-            />
-          </div>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <span className="text-base font-semibold">Filters</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn('gap-1.5 text-muted-foreground hover:text-foreground h-7', !anyActive && 'invisible pointer-events-none')}
+          onClick={onClear}
+          tabIndex={anyActive ? 0 : -1}
+          aria-hidden={!anyActive}
+        >
+          <X className="size-3.5" />
+          Clear filters
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground">Title or slug</Label>
+          <FilterInput
+            value={localSearch}
+            onChange={onLocalSearch}
+            placeholder="Search by title or slug…"
+            icon={<Search className="size-3.5" />}
+          />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Owner</Label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Filter by owner name…"
-              value={values.owner}
-              onChange={(e) => set('owner')(e.target.value)}
-              className="pl-8"
-            />
-          </div>
+          <FilterInput
+            value={localOwner}
+            onChange={onLocalOwner}
+            placeholder="Filter by owner name…"
+            icon={<Search className="size-3.5" />}
+          />
         </div>
-
-        {anyActive && (
-          <div className="flex items-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-muted-foreground hover:text-foreground"
-              onClick={() => onChange(EMPTY_FILTERS)}
-            >
-              <X className="size-3.5" />
-              Clear
-            </Button>
-          </div>
-        )}
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <DateRangeField
           label="Last edited"
-          from={values.updatedFrom}
-          to={values.updatedTo}
-          onFrom={set('updatedFrom')}
-          onTo={set('updatedTo')}
+          from={urlFilters.updatedFrom}
+          to={urlFilters.updatedTo}
+          onFrom={(v) => onDateFilter('updatedFrom', v)}
+          onTo={(v) => onDateFilter('updatedTo', v)}
         />
         <DateRangeField
           label="Date created"
-          from={values.createdFrom}
-          to={values.createdTo}
-          onFrom={set('createdFrom')}
-          onTo={set('createdTo')}
+          from={urlFilters.createdFrom}
+          to={urlFilters.createdTo}
+          onFrom={(v) => onDateFilter('createdFrom', v)}
+          onTo={(v) => onDateFilter('createdTo', v)}
         />
       </div>
     </div>
-  )
-}
-
-// ---- Project card ----
-
-function ProjectCard({ project }: { project: PublicProject }) {
-  const navigate = useNavigate()
-  const fmt = (d: string) =>
-    new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-
-  return (
-    <button
-      onClick={() => navigate(projectPath(project.slug))}
-      className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
-    >
-      <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent2/12 text-accent2">
-          <Globe className="size-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 font-semibold leading-snug transition-colors group-hover:text-primary">
-            {project.name}
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {project.document_count} {project.document_count === 1 ? 'document' : 'documents'}
-          </div>
-        </div>
-      </div>
-
-      {project.owner && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <ProfileAvatar
-            userId={project.owner}
-            name={project.owner_name}
-            email={null}
-            avatarUrl={project.owner_avatar_url}
-            variant="inline"
-            size="sm"
-          />
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span>Updated {fmt(project.updated_at)}</span>
-        <span>Created {fmt(project.created_at)}</span>
-      </div>
-    </button>
   )
 }
 
@@ -218,51 +256,71 @@ function ProjectCard({ project }: { project: PublicProject }) {
 
 function ProjectsList({
   api,
-  filters,
-  setFilters,
+  urlFilters,
+  localSearch,
+  localOwner,
+  onLocalSearch,
+  onLocalOwner,
+  onDateFilter,
+  onClear,
 }: {
   api: ListApi<PublicProject>
-  filters: FilterState
-  setFilters: (f: FilterState) => void
+  urlFilters: FilterState
+  localSearch: string
+  localOwner: string
+  onLocalSearch: (v: string) => void
+  onLocalOwner: (v: string) => void
+  onDateFilter: (key: keyof FilterState, v: string) => void
+  onClear: () => void
 }) {
-  // Sync typed UI filter state into the List's internal Filter[] state.
-  // Stable reference: api.setFilters comes from Zustand and doesn't change identity.
   useEffect(() => {
-    api.setFilters(toFilterList(filters))
+    api.setFilters(toFilterList(urlFilters))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters])
+  }, [urlFilters])
+
+  const anyActive =
+    localSearch !== '' ||
+    localOwner !== '' ||
+    Object.values(urlFilters).some((v) => v !== '')
 
   return (
     <div className="flex flex-col gap-6">
-      <FiltersBar values={filters} onChange={setFilters} />
+      <FiltersBar
+        urlFilters={urlFilters}
+        localSearch={localSearch}
+        localOwner={localOwner}
+        onLocalSearch={onLocalSearch}
+        onLocalOwner={onLocalOwner}
+        onDateFilter={onDateFilter}
+        onClear={onClear}
+      />
 
       {api.data.length === 0 ? (
         <EmptyState
+          className="mt-8"
           accent="muted"
-          icon={<Globe />}
+          icon={<SearchX />}
           title="No public projects"
           hint={
-            Object.values(filters).some((v) => v !== '')
+            anyActive
               ? 'No projects match your current filters.'
               : 'There are no public projects to browse right now.'
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {api.data.map((p) => (
-            <ProjectCard key={p.id} project={p} />
+            <PublicProjectCard key={p.id} project={p} />
           ))}
         </div>
       )}
 
-      {api.pagination.total > api.pagination.pageSize && (
-        <Pagination
-          pagination={api.pagination}
-          onPageChange={api.setPage}
-          onPageSizeChange={api.setPageSize}
-          pageSizeOptions={[12, 24, 48]}
-        />
-      )}
+      <Pagination
+        pagination={api.pagination}
+        onPageChange={api.setPage}
+        onPageSizeChange={api.setPageSize}
+        pageSizeOptions={[10, 25, 50]}
+      />
     </div>
   )
 }
@@ -272,26 +330,90 @@ function ProjectsList({
 export default function PublicProjectsPage() {
   useDocumentTitle(`Public projects · ${APP_NAME}`)
 
-  const [searchParams] = useSearchParams()
-  const initialOwner = searchParams.get('owner') ?? ''
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [filters, setFilters] = useState<FilterState>({ ...EMPTY_FILTERS, owner: initialOwner })
+  const [localSearch, setLocalSearch] = useState(() => searchParams.get('search') ?? '')
+  const [localOwner, setLocalOwner] = useState(() => searchParams.get('owner') ?? '')
+
+  const dSearch = useDebounce(localSearch, 300)
+  const dOwner = useDebounce(localOwner, 300)
+
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        dSearch ? n.set('search', dSearch) : n.delete('search')
+        return n
+      },
+      { replace: true },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dSearch])
+
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        dOwner ? n.set('owner', dOwner) : n.delete('owner')
+        return n
+      },
+      { replace: true },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dOwner])
+
+  const setDateFilter = (key: keyof FilterState, value: string) => {
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        value ? n.set(key, value) : n.delete(key)
+        return n
+      },
+      { replace: true },
+    )
+  }
+
+  const clearAll = () => {
+    setLocalSearch('')
+    setLocalOwner('')
+    setSearchParams({}, { replace: true })
+  }
+
+  const urlFilters: FilterState = {
+    search: searchParams.get('search') ?? '',
+    owner: searchParams.get('owner') ?? '',
+    updatedFrom: searchParams.get('updatedFrom') ?? '',
+    updatedTo: searchParams.get('updatedTo') ?? '',
+    createdFrom: searchParams.get('createdFrom') ?? '',
+    createdTo: searchParams.get('createdTo') ?? '',
+  }
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-8 pt-10 pb-24 max-md:px-5 max-md:pt-14">
-      <header className="mb-8 border-b border-border pb-8">
-        <h1 className="text-[2rem] font-bold tracking-tight">Public projects</h1>
-        <p className="mt-1 text-muted-foreground">Browse everything shared openly on {APP_NAME}.</p>
-      </header>
+    <PageLayout>
+      <PageHeader
+        title="Public projects"
+        description={`Browse everything shared openly on ${APP_NAME}.`}
+      />
 
       <List
         useQuery={usePublicProjectsQuery}
         storeKey="public-projects"
         defaultSort={[{ field: 'updated_at', dir: 'desc' }]}
-        initialPageSize={12}
+        initialPageSize={10}
       >
-        {(api) => <ProjectsList api={api} filters={filters} setFilters={setFilters} />}
+        {(api) => (
+          <ProjectsList
+            api={api}
+            urlFilters={urlFilters}
+            localSearch={localSearch}
+            localOwner={localOwner}
+            onLocalSearch={setLocalSearch}
+            onLocalOwner={setLocalOwner}
+            onDateFilter={setDateFilter}
+            onClear={clearAll}
+          />
+        )}
       </List>
-    </div>
+    </PageLayout>
   )
 }

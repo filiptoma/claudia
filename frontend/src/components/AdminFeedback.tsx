@@ -11,7 +11,7 @@ import type { Feedback } from '../lib/types'
 const col = createColumnHelper<Feedback>()
 
 const useFeedbackQuery = createSupabaseListQuery<Feedback>({
-  table: 'feedback',
+  rpc: 'list_feedback',
   queryKey: 'admin-feedback',
   defaultSort: [{ field: 'created_at', dir: 'desc' }],
 })

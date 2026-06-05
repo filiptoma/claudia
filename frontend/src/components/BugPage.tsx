@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { APP_NAME } from '../lib/brand'
+import PageLayout from './PageLayout'
 
 const schema = z.object({
   title: z.string().trim().min(5, 'Please provide a short summary (at least 5 characters)').max(200),
@@ -81,8 +82,8 @@ export default function BugPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-8 pt-10 pb-20 max-md:px-5 max-md:pt-14">
-      <div className="mb-7 flex items-center gap-3">
+    <PageLayout variant="medium">
+      <div className="mb-7 flex items-start gap-3">
         <span className="flex size-10 items-center justify-center rounded-xl bg-destructive/12 text-destructive">
           <Bug className="size-5" />
         </span>
@@ -142,6 +143,6 @@ export default function BugPage() {
           {busy ? 'Sending…' : 'Submit bug report'}
         </Button>
       </form>
-    </div>
+    </PageLayout>
   )
 }

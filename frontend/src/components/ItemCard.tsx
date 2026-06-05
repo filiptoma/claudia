@@ -1,19 +1,21 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import ActionsMenu from './ActionsMenu'
 import type { MenuAction } from './ActionsMenu'
 
-// A clickable card used across the dashboard, project, folder, and workspace pages.
+// A navigable card used across the dashboard, project, folder, and workspace pages.
 //
-// The whole card is a single hover group: the lift transform lives on the OUTER wrapper, so the
-// absolutely-positioned action menu rides along with the card instead of staying put, and moving
-// the cursor onto the menu keeps the group hovered (the card no longer drops on menu hover).
+// Uses the "stretched link" pattern: a <Link> is absolutely positioned over the card
+// content. Action menu buttons sit above it (z-[1]) so they remain independently
+// clickable. This makes the entire card surface an accessible anchor while keeping
+// nested interactive elements valid HTML.
 export default function ItemCard({
   icon,
   title,
   titleAccessory,
   meta,
-  onOpen,
+  to,
   menu = [],
   accent = 'default',
   className,
@@ -23,7 +25,7 @@ export default function ItemCard({
   /** Small node rendered after the title (e.g. a privacy lock). */
   titleAccessory?: ReactNode
   meta?: ReactNode
-  onOpen: () => void
+  to: string
   menu?: MenuAction[]
   /** Icon-chip tint. 'indigo' marks the quick-note identity; everything else uses the warm default. */
   accent?: 'default' | 'indigo'
@@ -37,12 +39,12 @@ export default function ItemCard({
         className,
       )}
     >
-      <button
-        onClick={onOpen}
+      {/* Visible card content */}
+      <div
         className={cn(
-          'flex h-full w-full items-center gap-3.5 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-colors',
+          'flex h-full w-full items-center gap-3.5 rounded-xl border border-border bg-card p-4 shadow-sm transition-colors',
           'group-hover:border-primary/50 group-hover:shadow-md',
-          'focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
+          'group-focus-within:border-primary/50 group-focus-within:shadow-md',
           hasMenu && 'pr-12',
         )}
       >
@@ -65,9 +67,24 @@ export default function ItemCard({
             <span className="mt-1 block truncate text-xs text-muted-foreground">{meta}</span>
           )}
         </span>
-      </button>
+      </div>
+
+      {/* Stretched anchor covers the whole card. Rendered after content so it sits
+          on top in the stacking context and intercepts pointer events for navigation. */}
+      <Link
+        to={to}
+        className={cn(
+          'absolute inset-0 rounded-xl',
+          'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+        )}
+        tabIndex={0}
+      >
+        <span className="sr-only">{title}</span>
+      </Link>
+
+      {/* Action menu floats above the stretched link */}
       {hasMenu && (
-        <div className="absolute top-1/2 right-2 -translate-y-1/2">
+        <div className="absolute top-1/2 right-2 -translate-y-1/2 z-1">
           <ActionsMenu actions={menu} />
         </div>
       )}

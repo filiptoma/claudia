@@ -163,7 +163,7 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
               id="auth-email"
               type="email"
               placeholder="you@example.com"
-              autoComplete="email"
+              autoComplete={tab === 'login' ? 'username' : 'email'}
               aria-invalid={!!errors.email}
               {...register('email')}
             />

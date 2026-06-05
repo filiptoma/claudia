@@ -7,6 +7,8 @@ import { noteSplitPath } from '../lib/paths'
 import { Button } from '@/components/ui/button'
 import QuickNoteCard from './QuickNoteCard'
 import EmptyState from './EmptyState'
+import PageLayout from './PageLayout'
+import PageHeader from './PageHeader'
 import { QuickNoteIcon } from './EntityIcons'
 import type { MenuAction } from './ActionsMenu'
 import type { DocMeta } from '../hooks/useTree'
@@ -36,13 +38,11 @@ export default function QuickNotesPage() {
   ]
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-8 pt-10 pb-24 max-md:px-5 max-md:pt-14">
-      <div className="mb-6">
-        <h1 className="text-[2rem] font-bold tracking-tight">Quick notes</h1>
-        <p className="mt-1 text-muted-foreground">
-          Jot things down without worrying about a title or where they go.
-        </p>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Quick notes"
+        description="Jot things down without worrying about a title or where they go."
+      />
 
       {notes.length === 0 ? (
         <EmptyState
@@ -63,6 +63,6 @@ export default function QuickNotesPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageLayout>
   )
 }

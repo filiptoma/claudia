@@ -31,6 +31,8 @@ import {
 } from '@/components/ui/select'
 import QuerySuspense from './QuerySuspense'
 import ProfileAvatar from './ProfileAvatar'
+import PageLayout from './PageLayout'
+import PageHeader from './PageHeader'
 import { cn } from '@/lib/utils'
 import type { MemberInfo, MemberRole } from '../lib/types'
 
@@ -41,10 +43,12 @@ function RoleSelect({
   value,
   disabled,
   onChange,
+  hideViewer,
 }: {
   value: MemberRole
   disabled?: boolean
   onChange: (r: MemberRole) => void
+  hideViewer?: boolean
 }) {
   return (
     <Select value={value} disabled={disabled} onValueChange={(v) => onChange(v as MemberRole)}>
@@ -52,7 +56,7 @@ function RoleSelect({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="viewer">can view</SelectItem>
+        {!hideViewer && <SelectItem value="viewer">can view</SelectItem>}
         <SelectItem value="editor">can edit</SelectItem>
       </SelectContent>
     </Select>
@@ -127,6 +131,8 @@ export default function ProjectSettings() {
       const next = !isPublic
       await setProjectPublic(project.id, next)
       setIsPublic(next)
+      // Public projects have no concept of "view-only" members (anyone can already view).
+      if (next && inviteRole === 'viewer') setInviteRole('editor')
       toast('success', next ? 'Project is now public' : 'Project is now private')
     })
 
@@ -164,23 +170,23 @@ export default function ProjectSettings() {
   return (
     <QuerySuspense queries={queries} loadingLabel="Loading settings…">
       {(() => {
-        if (!project) return <Notice title="Not found" body={`Project “${projectSlug}” doesn’t exist or you can’t access it.`} />
+        if (!project) return <Notice title="Not found" body={`Project "${projectSlug}" doesn’t exist or you can’t access it.`} />
         if (project.is_workspace)
           return <Notice title="No settings" body="Your workspace is private to you and can’t be shared or configured." />
         if (!canConfigureProject(project, role, uid))
           return <Notice title="No access" body="Only the project owner can change these settings." />
 
         return (
-          <div className="mx-auto max-w-2xl px-8 pt-8 pb-20 max-md:px-5">
-            <h1 className="mb-1 text-2xl font-bold tracking-tight">Project settings</h1>
-            <p className="mb-8 text-sm text-muted-foreground">
-              Manage who can see and edit “{project.name}”.
-            </p>
+          <PageLayout variant="medium">
+            <PageHeader
+              title="Project settings"
+              description={`Manage who can see and edit "${project.name}".`}
+            />
 
             {owner && (
               <section className="mb-8">
                 <h2 className="mb-3 text-sm font-semibold">Owner</h2>
-                <div className="rounded-xl border border-border bg-card px-4 py-3">
+                <div className="flex items-center rounded-xl border border-border bg-card px-4 py-3">
                   <ProfileAvatar
                     userId={owner.id}
                     name={owner.name}
@@ -220,8 +226,8 @@ export default function ProjectSettings() {
 
             <section>
               <h2 className="mb-3 text-sm font-semibold">Invite people</h2>
-              <form className="flex items-start gap-2" onSubmit={onInvite} noValidate>
-                <div className="flex flex-1 flex-col gap-1.5">
+              <form className="flex flex-col gap-2" onSubmit={onInvite} noValidate>
+                <div className="flex flex-col gap-1.5">
                   <Input
                     type="email"
                     placeholder="email@example.com"
@@ -230,10 +236,12 @@ export default function ProjectSettings() {
                   />
                   {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
                 </div>
-                <RoleSelect value={inviteRole} onChange={setInviteRole} />
-                <Button type="submit" disabled={busy}>
-                  <UserPlus /> Add
-                </Button>
+                <div className="flex items-center gap-2">
+                  <RoleSelect value={inviteRole} onChange={setInviteRole} hideViewer={isPublic} />
+                  <Button type="submit" disabled={busy} className="flex-1 md:flex-none">
+                    <UserPlus /> Add
+                  </Button>
+                </div>
               </form>
 
               <div className="mt-3 overflow-hidden rounded-xl border border-border">
@@ -255,7 +263,7 @@ export default function ProjectSettings() {
                       size="sm"
                       className="min-w-0 flex-1"
                     />
-                    <RoleSelect value={m.role} disabled={busy} onChange={(r) => void changeRole(m.user_id, r)} />
+                    <RoleSelect value={m.role} disabled={busy} onChange={(r) => void changeRole(m.user_id, r)} hideViewer={isPublic} />
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -275,7 +283,7 @@ export default function ProjectSettings() {
                 ))}
               </div>
             </section>
-          </div>
+          </PageLayout>
         )
       })()}
     </QuerySuspense>

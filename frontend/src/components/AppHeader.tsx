@@ -9,6 +9,7 @@ import {
 import {
   FilePlus,
   FolderPlus,
+  Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -18,6 +19,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo } from "react";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -72,6 +74,7 @@ export default function AppHeader() {
   const location = useLocation();
   const navigate = useNavigate();
   const { role, uid } = useAuth();
+  const isMobile = useIsMobile();
   const { members, folders, documents } = useTree();
   const actions = useTreeActions();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -105,14 +108,16 @@ export default function AppHeader() {
     },
   });
 
+  // Owner avatar shown in the header for public projects — hidden on mobile to save space.
   const ownerAvatar =
-    project?.is_public && !project.is_workspace && project.owner ? (
+    !isMobile && project?.is_public && !project.is_workspace && project.owner ? (
       <ProfileAvatar
         userId={project.owner}
         name={ownerQuery.data?.name ?? null}
         email={null}
         avatarUrl={ownerQuery.data?.avatar_url ?? null}
-        variant="tooltip"
+        isLoading={ownerQuery.isPending}
+        variant="inline"
         size="sm"
       />
     ) : null;
@@ -218,6 +223,7 @@ export default function AppHeader() {
           workspace && notes.length > 0 ? (
             <CreateMenu
               variant="accent"
+              compact={isMobile}
               actions={[
                 {
                   label: "New quick note",
@@ -336,6 +342,7 @@ export default function AppHeader() {
               {canEdit && (
                 <>
                   <SaveIndicator />
+                  {ownerAvatar}
                   <ModeSwitch mode={mode} onChange={setMode} />
                   <ActionsMenu
                     alwaysVisible
@@ -344,7 +351,7 @@ export default function AppHeader() {
                   />
                 </>
               )}
-              {ownerAvatar}
+              {!canEdit && ownerAvatar}
             </>
           ) : null
         }
@@ -395,6 +402,7 @@ export default function AppHeader() {
                 <>
                   {!folderEmpty && (
                     <CreateMenu
+                      compact={isMobile}
                       actions={[
                         {
                           label: "New document",
@@ -407,6 +415,7 @@ export default function AppHeader() {
                       ]}
                     />
                   )}
+                  {ownerAvatar}
                   <ActionsMenu
                     alwaysVisible
                     label="Folder actions"
@@ -414,7 +423,7 @@ export default function AppHeader() {
                   />
                 </>
               )}
-              {ownerAvatar}
+              {!canEdit && ownerAvatar}
             </>
           ) : null
         }
@@ -503,7 +512,8 @@ export default function AppHeader() {
           <>
             {canEdit && (
               <>
-                {!projectEmpty && <CreateMenu actions={createActions} />}
+                {!projectEmpty && <CreateMenu actions={createActions} compact={isMobile} />}
+                {ownerAvatar}
                 <ActionsMenu
                   alwaysVisible
                   label="Project actions"
@@ -511,7 +521,7 @@ export default function AppHeader() {
                 />
               </>
             )}
-            {ownerAvatar}
+            {!canEdit && ownerAvatar}
           </>
         ) : null
       }
@@ -526,15 +536,15 @@ function HeaderShell({
   items: Crumb[];
   actions?: ReactNode;
 }) {
-  const { collapsed, toggle } = useSidebar();
+  const { collapsed, toggle, openMobile } = useSidebar();
   return (
-    <header className="flex h-13 shrink-0 items-center border-b border-border bg-background/80 px-3 backdrop-blur-sm  sm:px-4">
-      {/* Brand zone: sidebar toggle + logo. Lives in the app bar so the logo is always visible,
-          even while the sidebar is collapsed. */}
+    <header className="flex h-13 shrink-0 items-center border-b border-border bg-background/80 px-2 backdrop-blur-sm sm:px-3">
+      {/* Brand zone: logo. Always visible regardless of sidebar state. On mobile the app name text
+          is hidden so we pull in the padding significantly to reclaim horizontal space. */}
       <Link
         to="/"
         aria-label={APP_NAME}
-        className="flex items-center gap-2 text-base font-bold tracking-tight border-r h-full pl-2 pr-6 border-border"
+        className="flex items-center gap-2 text-base font-bold tracking-tight border-r h-full pl-1.5 pr-2 border-border md:pl-2 md:pr-6"
       >
         <img
           src={astroLogoBlack}
@@ -551,6 +561,7 @@ function HeaderShell({
         <span className="max-sm:hidden">{APP_NAME}</span>
       </Link>
       <div className="border-r border-border h-13 flex items-center justify-center px-1">
+        {/* Desktop: collapse/expand sidebar */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -571,12 +582,22 @@ function HeaderShell({
             {collapsed ? "Show sidebar" : "Collapse sidebar"}
           </TooltipContent>
         </Tooltip>
+        {/* Mobile: open sidebar drawer */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={openMobile}
+          aria-label="Open navigation"
+          className="flex size-8 text-muted-foreground md:hidden"
+        >
+          <Menu className="size-4.5" />
+        </Button>
       </div>
-      <div className="flex min-w-0 flex-1 items-center pl-3">
+      <div className="flex min-w-0 flex-1 items-center pl-2 pr-1 md:pl-3">
         <Breadcrumbs items={items} />
       </div>
       {actions && (
-        <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        <div className="flex shrink-0 items-center gap-1.5 max-md:gap-1">{actions}</div>
       )}
     </header>
   );

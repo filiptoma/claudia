@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowRight,
+  Bug,
   ChevronDown,
   ChevronRight,
   FilePlus,
   FolderPlus,
+  Lightbulb,
   LogOut,
   Moon,
   MoreHorizontal,
@@ -88,6 +91,7 @@ export default function Sidebar({
   const navigate = useNavigate();
   const { collapsed: sidebarCollapsed } = useSidebar();
 
+  const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showLogin, setShowLogin] = useState(false);
 
@@ -195,7 +199,7 @@ export default function Sidebar({
           to={docPath(p.slug, folderSlug, d.slug)}
           onClick={onCloseDrawer}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:py-2.5",
             active ? "font-medium text-foreground" : "text-sidebar-foreground",
           )}
         >
@@ -207,7 +211,7 @@ export default function Sidebar({
           />
           <span className="min-w-0 flex-1 truncate">{docLabel(d)}</span>
         </Link>
-        {editable && <ActionsMenu actions={menu} />}
+        {editable && !isMobile && <ActionsMenu actions={menu} />}
       </div>
     );
   };
@@ -253,7 +257,7 @@ export default function Sidebar({
                 )}
               >
                 <button
-                  className="ml-1 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                  className="ml-1 flex size-5 max-md:size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
                   onClick={() => collapse(f.id, !isCollapsed)}
                   aria-label={isCollapsed ? "Expand" : "Collapse"}
                 >
@@ -271,7 +275,7 @@ export default function Sidebar({
                     onCloseDrawer();
                   }}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-1 text-sm",
+                    "flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-1 text-sm max-md:py-2.5",
                     folderActive
                       ? "font-medium text-foreground"
                       : "text-sidebar-foreground",
@@ -285,7 +289,7 @@ export default function Sidebar({
                   />
                   <span className="min-w-0 flex-1 truncate">{f.name}</span>
                 </Link>
-                {editable && <ActionsMenu actions={menu} />}
+                {editable && !isMobile && <ActionsMenu actions={menu} />}
               </div>
               {!isCollapsed && (
                 <div className="my-0.5 ml-4 border-l border-sidebar-border pl-1">
@@ -333,11 +337,16 @@ export default function Sidebar({
             separatorBefore: canEdit,
             onSelect: () => void actions.editProject(p),
           },
-          {
-            label: "Settings",
-            icon: <Settings />,
-            onSelect: () => navigate(projectSettingsPath(p.slug)),
-          },
+          // Settings page is not part of the mobile experience.
+          ...(!isMobile
+            ? ([
+                {
+                  label: "Settings",
+                  icon: <Settings />,
+                  onSelect: () => navigate(projectSettingsPath(p.slug)),
+                },
+              ] as MenuAction[])
+            : []),
           {
             label: "Delete",
             icon: <Trash2 />,
@@ -352,20 +361,18 @@ export default function Sidebar({
     <aside
       className={cn(
         "flex h-full shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
-        "w-80 transition-[width,transform] duration-300 ease-in-out",
-        sidebarCollapsed && "md:w-0 md:border-r-0",
-        "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl",
+        // Mobile: fixed drawer, always w-80, slides in/out via translate.
+        "max-md:w-80 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl",
         drawerOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
+        // Desktop: mutually exclusive width classes so Tailwind ordering never causes conflicts,
+        // plus a smooth width transition on collapse/expand.
+        sidebarCollapsed ? "md:w-0 md:border-r-0" : "md:w-68 lg:w-80",
+        "md:transition-[width] md:duration-300 md:ease-in-out",
       )}
     >
       {/* Inner content stays put and only fades (no translate) as the aside collapses its width. The
           quicker opacity fade masks the width-clip so it reads as a clean fade-out, not a shift. */}
-      <div
-        className={cn(
-          "flex h-full w-80 flex-col transition-opacity duration-200 ease-in-out",
-          sidebarCollapsed && "md:opacity-0",
-        )}
-      >
+      <div className="flex h-full w-80 md:w-68 lg:w-80 flex-col">
         <nav className="flex-1 overflow-y-auto px-2 py-3">
           {proj ? (
             <>
@@ -374,7 +381,7 @@ export default function Sidebar({
                   to={projectPath(proj.slug)}
                   onClick={onCloseDrawer}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center rounded-md px-1.5 py-1 text-sm font-bold tracking-tight hover:bg-sidebar-accent gap-2",
+                    "flex min-w-0 flex-1 items-center rounded-md px-1.5 py-1 max-md:py-2 text-sm font-bold tracking-tight hover:bg-sidebar-accent gap-2",
                   )}
                 >
                   <ProjectGlyph
@@ -399,7 +406,7 @@ export default function Sidebar({
                           to={notesPath(proj.slug)}
                           onClick={onCloseDrawer}
                           aria-label="All quick notes"
-                          className="group flex h-7 flex-1 items-center gap-1.5 rounded-md px-1.5 hover:bg-sidebar-accent"
+                          className="group flex h-7 max-md:h-10 flex-1 items-center gap-1.5 rounded-md px-1.5 hover:bg-sidebar-accent"
                         >
                           <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase group-hover:text-foreground">
                             Quick notes
@@ -414,7 +421,7 @@ export default function Sidebar({
                         <button
                           onClick={() => void onNewQuickNote(proj)}
                           aria-label="New quick note"
-                          className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm shadow-primary/20 transition-colors hover:bg-primary/90"
+                          className="flex size-7 max-md:size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm shadow-primary/20 transition-colors hover:bg-primary/90"
                         >
                           <Plus className="size-4.5" />
                         </button>
@@ -436,7 +443,7 @@ export default function Sidebar({
                             to={notePath(proj.slug, n.slug)}
                             onClick={onCloseDrawer}
                             className={cn(
-                              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors max-md:py-2.5",
                               active
                                 ? "bg-primary/15 font-medium text-foreground"
                                 : "text-sidebar-foreground hover:bg-sidebar-accent",
@@ -492,42 +499,65 @@ export default function Sidebar({
           </div>
         )}
 
-        <div className="shrink-0 border-t border-sidebar-border p-2">
+        <div className="shrink-0 border-t border-sidebar-border p-2 max-md:pb-[max(8px,env(safe-area-inset-bottom))]">
           {user ? (
-            <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+            <div className="flex items-center gap-2 rounded-md px-2 py-1.5 max-md:py-2">
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                <ProfileAvatar
-                  userId={user.id}
-                  name={user.name}
-                  email={user.email}
-                  avatarUrl={user.avatar_url}
-                  variant="inline"
-                  size="sm"
-                  isSelf
-                />
-                {role === "admin" && <Badge variant="destructive">A</Badge>}
-                {role === "mod" && <Badge>MOD</Badge>}
+                {/* Wrap with a Link so clicking the avatar closes the drawer on mobile too. */}
+                <Link
+                  to="/profile"
+                  onClick={onCloseDrawer}
+                  className="inline-flex min-w-0 flex-1 items-center gap-2 hover:opacity-80 transition-opacity"
+                >
+                  <ProfileAvatar
+                    userId={user.id}
+                    name={user.name}
+                    email={user.email}
+                    avatarUrl={user.avatar_url}
+                    variant="inline"
+                    size="sm"
+                    noLink
+                  />
+                </Link>
+                {role === "admin" && (
+                  <Badge
+                    variant="destructive"
+                    className="shrink-0 px-1.5 py-0 text-[10px] leading-5"
+                  >
+                    admin
+                  </Badge>
+                )}
+                {role === "mod" && (
+                  <Badge
+                    variant="secondary"
+                    className="shrink-0 px-1.5 py-0 text-[10px] leading-5"
+                  >
+                    mod
+                  </Badge>
+                )}
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-7 shrink-0 text-muted-foreground"
+                    className="size-7 max-md:size-9 shrink-0 text-muted-foreground"
                     aria-label="Account menu"
                   >
                     <MoreHorizontal className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" side="top">
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      onCloseDrawer();
-                      navigate("/profile");
-                    }}
-                  >
-                    <User /> Profile
-                  </DropdownMenuItem>
+                  {!isMobile && (
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        onCloseDrawer();
+                        navigate("/profile");
+                      }}
+                    >
+                      <User /> Profile
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onSelect={(e) => {
                       e.preventDefault();
@@ -536,6 +566,23 @@ export default function Sidebar({
                   >
                     {theme === "dark" ? <Sun /> : <Moon />}
                     {theme === "dark" ? "Light mode" : "Dark mode"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onCloseDrawer();
+                      navigate("/bug");
+                    }}
+                  >
+                    <Bug className="text-destructive" /> Report a bug
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onCloseDrawer();
+                      navigate("/request");
+                    }}
+                  >
+                    <Lightbulb className="text-accent2" /> Feature request
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

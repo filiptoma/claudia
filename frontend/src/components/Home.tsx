@@ -1,29 +1,52 @@
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Globe, Layers, Lock, Plus, StickyNote } from 'lucide-react'
+import { ArrowRight, Bug, Globe, Layers, Lightbulb, Lock, Plus, StickyNote } from 'lucide-react'
 import { useTree } from '../hooks/useTree'
 import { useAuth } from '../context/AuthContext'
 import { useTreeActions } from '../hooks/useTreeActions'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { projectVisibility } from '../lib/access'
 import { APP_NAME } from '../lib/brand'
 import { noteSplitPath, projectPath, publicProjectsPath } from '../lib/paths'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import ItemCard from './ItemCard'
+import ProjectCard from './ProjectCard'
 import EmptyState from './EmptyState'
+import PageLayout from './PageLayout'
+import ViewAllCard from './ViewAllCard'
+import MobileHome from './MobileHome'
 import { ProjectGlyph, WorkspaceIcon } from './EntityIcons'
 import type { Project } from '../lib/types'
 
 const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
+
+function FeedbackCta() {
+  return (
+    <section className="mt-12 rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <h2 className="mb-1 text-sm font-semibold tracking-wide text-muted-foreground uppercase">Help us improve</h2>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Found something broken? Have an idea?{' '}
+        <Link to="/bug" className="inline-flex items-center gap-1 font-medium text-destructive hover:underline">
+          <Bug className="size-3.5" /> Report a bug
+        </Link>
+        {' '}or{' '}
+        <Link to="/request" className="inline-flex items-center gap-1 font-medium text-accent2 hover:underline">
+          <Lightbulb className="size-3.5" /> Request a feature
+        </Link>
+        .
+      </p>
+    </section>
+  )
+}
 
 export default function Home() {
   const { projects, documents, members, loading } = useTree()
   const { user, uid, isStaff } = useAuth()
   const actions = useTreeActions()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
 
-  // The home dashboard's tab shows the bare app name.
   useDocumentTitle(APP_NAME)
 
   const memberCount = useMemo(() => {
@@ -35,7 +58,6 @@ export default function Home() {
   const workspace = uid ? projects.find((p) => p.is_workspace && p.owner === uid) ?? null : null
 
   // Authed users see the projects they own or collaborate on; logged-out visitors see public ones.
-  // (Staff can technically read every project, but those belong on the /admin/projects page.)
   const myProjects = useMemo(
     () =>
       uid
@@ -48,15 +70,14 @@ export default function Home() {
     [projects, members, uid],
   )
 
-  // Public projects the signed-in user can discover but isn't part of.
-  // Sorted by latest updated, capped at 5 for the dashboard preview.
+  // All public projects for the discovery section — sorted by latest updated, capped at 5.
   const publicProjects = useMemo(() => {
     if (!uid) return []
     return projects
-      .filter((p) => p.is_public && !p.is_workspace && !myProjects.some((mine) => mine.id === p.id))
+      .filter((p) => p.is_public && !p.is_workspace)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, 5)
-  }, [projects, myProjects, uid])
+  }, [projects, uid])
 
   const onCreateProject = async () => {
     const p = await actions.newProject()
@@ -67,18 +88,19 @@ export default function Home() {
     if (note && workspace) navigate(noteSplitPath(workspace.slug, note.slug))
   }
 
+  // Mobile gets its own focused layout — no grids, no feedback CTA, just the core sections.
+  if (isMobile) return <MobileHome />
+
   if (loading) return <div className="p-10 text-muted-foreground">Loading…</div>
 
-  // ----- logged-out landing: the public projects, with a short masthead naming the app. No
-  // "Dashboard"/workspace chrome and no sign-in button here — the sidebar owns sign-in. -----
+  // ----- logged-out landing -----
   if (!user) {
-    // Sort by latest updated and show at most 5 as a preview.
     const preview = [...myProjects]
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, 5)
 
     return (
-      <div className="mx-auto w-full max-w-7xl px-8 pt-12 pb-24 max-md:px-5 max-md:pt-14">
+      <PageLayout>
         <header className="border-b border-border pb-8">
           <h1 className="text-[2.5rem] font-bold tracking-tight text-balance">Notes, written in the open</h1>
           <p className="mt-3 max-w-2xl text-lg leading-relaxed text-muted-foreground">
@@ -101,42 +123,34 @@ export default function Home() {
                 const count = documents.filter((d) => d.project_id === p.id).length
                 const visibility = projectVisibility(p, memberCount.get(p.id) ?? 0)
                 return (
-                  <ItemCard
+                  <ProjectCard
                     key={p.id}
                     icon={<ProjectGlyph project={p} visibility={visibility} />}
                     title={p.name}
                     meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
-                    onOpen={() => navigate(projectPath(p.slug))}
+                    to={projectPath(p.slug)}
                   />
                 )
               })}
-            </div>
-            <div className="mt-6 text-center">
-              <Link
-                to={publicProjectsPath()}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-accent2 hover:underline"
-              >
-                Browse all public projects <ArrowRight className="size-3.5" />
-              </Link>
+              <ViewAllCard to={publicProjectsPath()} label="Browse all public projects" />
             </div>
           </>
         )}
-      </div>
+        <FeedbackCta />
+      </PageLayout>
     )
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-8 pt-10 pb-24 max-md:px-5 max-md:pt-14">
-      <div className="mb-8">
-        <h1 className="text-[2rem] font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">A clean, shared place for your markdown notes.</p>
+    <PageLayout>
+      <div className="mb-6 max-md:mb-4">
+        <h1 className="text-2xl font-bold tracking-tight max-md:text-xl">Dashboard</h1>
+        <p className="mt-1 text-sm text-muted-foreground">A clean, shared place for your markdown notes.</p>
       </div>
 
       {workspace && (
-        <section className="mb-10">
+        <section className="mb-8 max-md:mb-6">
           <h2 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">My Workspace</h2>
-          {/* A static callout hero: card base + a subtle gold→indigo (primary→secondary) wash to set
-              it apart from the plain project cards. Gradient is semi-transparent so text stays clean. */}
           <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card bg-linear-to-br from-primary/10 to-accent2/10 p-6 shadow-sm sm:flex-row sm:items-center">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm shadow-primary/25 [&_svg]:size-7">
               <WorkspaceIcon />
@@ -175,7 +189,6 @@ export default function Home() {
                 <TooltipContent>Manage all projects</TooltipContent>
               </Tooltip>
             )}
-            {/* When there are no projects the empty-state CTA below is the single call to action. */}
             {user && myProjects.length > 0 && (
               <Button size="sm" onClick={() => void onCreateProject()}>
                 <Plus /> New project
@@ -202,7 +215,7 @@ export default function Home() {
               const count = documents.filter((d) => d.project_id === p.id).length
               const visibility = projectVisibility(p, memberCount.get(p.id) ?? 0)
               return (
-                <ItemCard
+                <ProjectCard
                   key={p.id}
                   icon={<ProjectGlyph project={p} visibility={visibility} />}
                   title={p.name}
@@ -210,7 +223,7 @@ export default function Home() {
                     visibility === 'private' ? <Lock className="size-3 shrink-0 text-muted-foreground/70" /> : undefined
                   }
                   meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
-                  onOpen={() => navigate(projectPath(p.slug))}
+                  to={projectPath(p.slug)}
                 />
               )
             })}
@@ -218,36 +231,29 @@ export default function Home() {
         )}
       </section>
 
-      {publicProjects.length > 0 && (
-        <section className="mt-10">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-              <Globe className="size-3.5" /> Public Projects
-            </h2>
-            <Link
-              to={publicProjectsPath()}
-              className="flex items-center gap-1 text-xs font-medium text-accent2 hover:underline"
-            >
-              See all <ArrowRight className="size-3" />
-            </Link>
-          </div>
-          <div className={GRID}>
-            {publicProjects.map((p: Project) => {
-              const count = documents.filter((d) => d.project_id === p.id).length
-              const visibility = projectVisibility(p, memberCount.get(p.id) ?? 0)
-              return (
-                <ItemCard
-                  key={p.id}
-                  icon={<ProjectGlyph project={p} visibility={visibility} />}
-                  title={p.name}
-                  meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
-                  onOpen={() => navigate(projectPath(p.slug))}
-                />
-              )
-            })}
-          </div>
-        </section>
-      )}
-    </div>
+      {/* Public projects discovery — always visible for authenticated users */}
+      <section className="mt-8 max-md:mt-6">
+        <h2 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">
+          <Globe className="size-3.5" /> Public Projects
+        </h2>
+        <div className={GRID}>
+          {publicProjects.map((p: Project) => {
+            const visibility = projectVisibility(p, memberCount.get(p.id) ?? 0)
+            return (
+              <ProjectCard
+                key={p.id}
+                icon={<ProjectGlyph project={p} visibility={visibility} />}
+                title={p.name}
+                meta={new Date(p.updated_at).toLocaleDateString()}
+                to={projectPath(p.slug)}
+              />
+            )
+          })}
+          <ViewAllCard to={publicProjectsPath()} label="Browse all public projects" />
+        </div>
+      </section>
+
+      <FeedbackCta />
+    </PageLayout>
   )
 }

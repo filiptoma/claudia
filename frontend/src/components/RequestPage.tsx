@@ -1,44 +1,53 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { CheckCircle, Lightbulb } from 'lucide-react'
-import { submitFeedback } from '../lib/crud'
-import { useAuth } from '../context/AuthContext'
-import { useDocumentTitle } from '../hooks/useDocumentTitle'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { APP_NAME } from '../lib/brand'
-import easteregg from '../assets/easteregg.jpg'
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { CheckCircle, Lightbulb } from "lucide-react";
+import { submitFeedback } from "../lib/crud";
+import { useAuth } from "../context/AuthContext";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { APP_NAME } from "../lib/brand";
+import easteregg from "../assets/easteregg.jpg";
+import PageLayout from "./PageLayout";
 
 const schema = z.object({
   title: z
     .string()
     .trim()
-    .min(5, 'Please provide a short summary (at least 5 characters)')
+    .min(5, "Please provide a short summary (at least 5 characters)")
     .max(200),
   description: z
     .string()
     .trim()
-    .min(10, 'Please describe your idea in more detail (at least 10 characters)')
+    .min(
+      10,
+      "Please describe your idea in more detail (at least 10 characters)",
+    )
     .max(5000),
-  email: z.string().trim().email('Enter a valid email address').or(z.literal('')).optional(),
-})
-type FormValues = z.infer<typeof schema>
+  email: z
+    .string()
+    .trim()
+    .email("Enter a valid email address")
+    .or(z.literal(""))
+    .optional(),
+});
+type FormValues = z.infer<typeof schema>;
 
 function FieldError({ message }: { message?: string }) {
-  if (!message) return null
-  return <p className="text-xs text-destructive">{message}</p>
+  if (!message) return null;
+  return <p className="text-xs text-destructive">{message}</p>;
 }
 
 export default function RequestPage() {
-  useDocumentTitle(`Feature request · ${APP_NAME}`)
-  const { user, uid } = useAuth()
-  const [done, setDone] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [serverError, setServerError] = useState<string | null>(null)
+  useDocumentTitle(`Feature request · ${APP_NAME}`);
+  const { user, uid } = useAuth();
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
@@ -46,27 +55,31 @@ export default function RequestPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { title: '', description: '', email: user?.email ?? '' },
-  })
+    defaultValues: { title: "", description: "", email: user?.email ?? "" },
+  });
 
   const onSubmit = handleSubmit(async (values) => {
-    setBusy(true)
-    setServerError(null)
+    setBusy(true);
+    setServerError(null);
     try {
       await submitFeedback({
-        type: 'request',
+        type: "request",
         title: values.title,
         description: values.description,
         email: values.email || user?.email || null,
         userId: uid,
-      })
-      setDone(true)
+      });
+      setDone(true);
     } catch (e) {
-      setServerError(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
+      setServerError(
+        e instanceof Error
+          ? e.message
+          : "Something went wrong. Please try again.",
+      );
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  })
+  });
 
   if (done) {
     return (
@@ -74,10 +87,12 @@ export default function RequestPage() {
         <span className="flex size-16 items-center justify-center rounded-2xl bg-primary/12 ring-1 ring-primary/20">
           <CheckCircle className="size-8 text-primary" />
         </span>
-        <h1 className="text-2xl font-bold tracking-tight">Feature request received</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Feature request received
+        </h1>
         <p className="text-muted-foreground">
-          Thanks for the idea! We'll add it to the backlog and get back to you if we need more
-          details.
+          Thanks for the idea! We'll add it to the backlog and get back to you
+          if we need more details.
         </p>
         <img
           src={easteregg}
@@ -88,18 +103,22 @@ export default function RequestPage() {
           <Link to="/">Back to dashboard</Link>
         </Button>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-8 pt-10 pb-20 max-md:px-5 max-md:pt-14">
-      <div className="mb-7 flex items-center gap-3">
+    <PageLayout variant="medium">
+      <div className="mb-7 flex items-start gap-3">
         <span className="flex size-10 items-center justify-center rounded-xl bg-accent2/12 text-accent2">
           <Lightbulb className="size-5" />
         </span>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Request a feature</h1>
-          <p className="text-sm text-muted-foreground">Got an idea? We'd love to hear it.</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Request a feature
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Got an idea? We'd love to hear it.
+          </p>
         </div>
       </div>
 
@@ -108,7 +127,7 @@ export default function RequestPage() {
           src={easteregg}
           alt=""
           aria-hidden
-          className="h-40 w-full object-cover"
+          className="h-92 w-full object-cover object-top"
         />
 
         <form
@@ -123,7 +142,7 @@ export default function RequestPage() {
               id="req-title"
               placeholder="e.g. Export project as PDF"
               aria-invalid={!!errors.title}
-              {...register('title')}
+              {...register("title")}
             />
             <FieldError message={errors.title?.message} />
           </div>
@@ -136,7 +155,7 @@ export default function RequestPage() {
               placeholder="Describe the feature, the problem it solves, or how you'd use it…"
               aria-invalid={!!errors.description}
               className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 aria-invalid:border-destructive"
-              {...register('description')}
+              {...register("description")}
             />
             <FieldError message={errors.description?.message} />
           </div>
@@ -149,19 +168,21 @@ export default function RequestPage() {
                 type="email"
                 placeholder="so we can follow up if needed"
                 aria-invalid={!!errors.email}
-                {...register('email')}
+                {...register("email")}
               />
               <FieldError message={errors.email?.message} />
             </div>
           )}
 
-          {serverError && <p className="text-sm text-destructive">{serverError}</p>}
+          {serverError && (
+            <p className="text-sm text-destructive">{serverError}</p>
+          )}
 
           <Button type="submit" disabled={busy} className="self-start">
-            {busy ? 'Sending…' : 'Submit request'}
+            {busy ? "Sending…" : "Submit request"}
           </Button>
         </form>
       </div>
-    </div>
-  )
+    </PageLayout>
+  );
 }

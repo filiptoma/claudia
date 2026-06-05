@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Globe, Layers } from 'lucide-react'
+import { BookOpen, Layers } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { projectPath, publicProjectsPath } from '../lib/paths'
 import ProfileAvatar from './ProfileAvatar'
+import ProjectCard from './ProjectCard'
+import PageLayout from './PageLayout'
+import SectionHeader from './SectionHeader'
 import { Button } from '@/components/ui/button'
 import type { PublicProfileSummary, PublicProject } from '../lib/types'
 import { APP_NAME } from '../lib/brand'
@@ -89,7 +92,7 @@ export default function UserProfilePage() {
     new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 
   return (
-    <div className="mx-auto max-w-4xl px-8 pt-10 pb-24 max-md:px-5 max-md:pt-14">
+    <PageLayout variant="medium">
       {/* Profile header */}
       <div className="mb-8 flex items-center gap-4">
         <ProfileAvatar
@@ -108,16 +111,11 @@ export default function UserProfilePage() {
 
       {/* Public projects */}
       <section>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-            Public projects
-          </h2>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to={publicProjectsPath({ owner: profile.name ?? undefined })}>
-              See all
-            </Link>
-          </Button>
-        </div>
+        <SectionHeader
+          title="Public projects"
+          to={publicProjectsPath({ owner: profile.name ?? undefined })}
+          actionLabel="See all"
+        />
 
         {!projects ? (
           <div className="text-sm text-muted-foreground">Loading projects…</div>
@@ -126,29 +124,19 @@ export default function UserProfilePage() {
             No public projects yet.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {projects.map((p) => (
-              <button
+              <ProjectCard
                 key={p.id}
-                onClick={() => navigate(projectPath(p.slug))}
-                className="group flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent2/12 text-accent2">
-                  <Globe className="size-4.5" />
-                </span>
-                <div className="min-w-0">
-                  <div className="font-medium leading-snug line-clamp-2 transition-colors group-hover:text-primary">
-                    {p.name}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Updated {fmtDate(p.updated_at)}
-                  </div>
-                </div>
-              </button>
+                icon={<BookOpen className="size-5" />}
+                title={p.name}
+                meta={`Updated ${fmtDate(p.updated_at)}`}
+                to={projectPath(p.slug)}
+              />
             ))}
           </div>
         )}
       </section>
-    </div>
+    </PageLayout>
   )
 }

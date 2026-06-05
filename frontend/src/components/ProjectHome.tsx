@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, FilePlus, FolderPlus, Pencil, StickyNote, Trash2 } from 'lucide-react'
+import { FilePlus, FolderPlus, Pencil, StickyNote, Trash2 } from 'lucide-react'
+import ViewAllCard from './ViewAllCard'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
 import { useTreeActions } from '../hooks/useTreeActions'
@@ -13,9 +14,10 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { APP_NAME } from '../lib/brand'
 import { Button } from '@/components/ui/button'
 import QuerySuspense from './QuerySuspense'
-import ItemCard from './ItemCard'
+import EntityCard from './EntityCard'
 import QuickNoteCard from './QuickNoteCard'
 import EmptyState from './EmptyState'
+import PageLayout from './PageLayout'
 import { DocIcon, FolderGlyph, WorkspaceIcon } from './EntityIcons'
 import type { MenuAction } from './ActionsMenu'
 import type { DocMeta } from '../hooks/useTree'
@@ -104,21 +106,21 @@ export default function ProjectHome() {
             : []
 
         const folderCard = (f: Folder) => (
-          <ItemCard
+          <EntityCard
             key={f.id}
             icon={<FolderGlyph />}
             title={f.name}
             meta={`${docCount(f.id)} ${docCount(f.id) === 1 ? 'document' : 'documents'}`}
-            onOpen={() => navigate(folderPath(project.slug, f.slug))}
+            to={folderPath(project.slug, f.slug)}
             menu={folderCardMenu(f)}
           />
         )
         const docCard = (d: DocMeta) => (
-          <ItemCard
+          <EntityCard
             key={d.id}
             icon={<DocIcon />}
             title={docLabel(d)}
-            onOpen={() => navigate(docPathFromTree(project.slug, d, folders))}
+            to={docPathFromTree(project.slug, d, folders)}
             menu={docCardMenu(d)}
           />
         )
@@ -126,7 +128,7 @@ export default function ProjectHome() {
         // ---- folder view ----
         if (currentFolder) {
           return (
-            <div className="mx-auto w-full max-w-7xl px-8 pt-7 pb-24 max-md:px-5">
+            <PageLayout className="pt-7 max-md:pt-4">
               {folderDocs.length === 0 ? (
                 <EmptyState
                   icon={<FolderGlyph />}
@@ -143,7 +145,7 @@ export default function ProjectHome() {
               ) : (
                 <div className={GRID}>{folderDocs.map(docCard)}</div>
               )}
-            </div>
+            </PageLayout>
           )
         }
 
@@ -153,7 +155,7 @@ export default function ProjectHome() {
           const files = rootDocs
           const empty = projectFolders.length === 0 && files.length === 0 && workspaceNotes.length === 0
           return (
-            <div className="mx-auto w-full max-w-7xl px-8 pt-7 pb-24 max-md:px-5">
+            <PageLayout className="pt-7 max-md:pt-4">
               {empty ? (
                 <EmptyState
                   accent="indigo"
@@ -186,26 +188,20 @@ export default function ProjectHome() {
                         {workspaceNotes.slice(0, WORKSPACE_NOTE_LIMIT).map((n) => (
                           <QuickNoteCard key={n.id} note={n} workspaceSlug={project.slug} menu={docCardMenu(n)} />
                         ))}
-                        <Link
-                          to={notesPath(project.slug)}
-                          className="group flex items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card/40 p-4 text-sm font-medium text-muted-foreground transition-colors hover:border-accent2/60 hover:text-foreground"
-                        >
-                          View all quick notes
-                          <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                        </Link>
+                        <ViewAllCard to={notesPath(project.slug)} label="View all quick notes" />
                       </div>
                     </Section>
                   )}
                 </div>
               )}
-            </div>
+            </PageLayout>
           )
         }
 
         // ---- regular project root ----
         const empty = projectFolders.length === 0 && rootDocs.length === 0
         return (
-          <div className="mx-auto w-full max-w-7xl px-8 pt-7 pb-24 max-md:px-5">
+          <PageLayout className="pt-7 max-md:pt-4">
             {empty ? (
               <EmptyState
                 icon={<DocIcon />}
@@ -230,7 +226,7 @@ export default function ProjectHome() {
                 {rootDocs.length > 0 && <Section title="Documents"><div className={GRID}>{rootDocs.map(docCard)}</div></Section>}
               </div>
             )}
-          </div>
+          </PageLayout>
         )
       })()}
     </QuerySuspense>

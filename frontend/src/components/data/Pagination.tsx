@@ -93,106 +93,112 @@ export default function Pagination(props: PaginationProps) {
 
   const pages = getPaginationRange(page, totalPages, siblings, boundaries)
 
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Select
-          value={String(pageSize)}
-          onValueChange={(v) => onPageSizeChange(Number(v))}
-        >
-          <SelectTrigger size="sm" className="w-18">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {pageSizeOptions.map((size) => (
-              <SelectItem key={size} value={String(size)}>
-                {size}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span>per page</span>
-      </div>
+  const pageControls = (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8"
+        aria-label="First page"
+        disabled={page <= 1}
+        onClick={() => onPageChange(1)}
+      >
+        <ChevronsLeft />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8"
+        aria-label="Previous page"
+        disabled={page <= 1}
+        onClick={() => onPageChange(page - 1)}
+      >
+        <ChevronLeft />
+      </Button>
 
-      <p className="text-sm text-muted-foreground">
-        {hasResults ? (
-          <>
+      {pages.map((item, index) =>
+        item === 'dots' ? (
+          <span
+            key={`dots-${index}`}
+            className="px-1 text-sm text-muted-foreground select-none"
+            aria-hidden
+          >
+            …
+          </span>
+        ) : (
+          <Button
+            key={item}
+            variant={item === page ? 'default' : 'ghost'}
+            size="icon"
+            className={cn('size-8', item === page && 'pointer-events-none')}
+            aria-label={`Page ${item}`}
+            aria-current={item === page ? 'page' : undefined}
+            onClick={() => onPageChange(item)}
+          >
+            {item}
+          </Button>
+        ),
+      )}
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8"
+        aria-label="Next page"
+        disabled={page >= totalPages}
+        onClick={() => onPageChange(page + 1)}
+      >
+        <ChevronRight />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8"
+        aria-label="Last page"
+        disabled={page >= totalPages}
+        onClick={() => onPageChange(totalPages)}
+      >
+        <ChevronsRight />
+      </Button>
+    </div>
+  )
+
+  return (
+    <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3">
+      {/* Row 1 (mobile) / inline (desktop): size selector + results count */}
+      <div className="flex items-center justify-between gap-3 md:contents">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Select
+            value={String(pageSize)}
+            onValueChange={(v) => onPageSizeChange(Number(v))}
+          >
+            <SelectTrigger size="sm" className="w-18">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {pageSizeOptions.map((size) => (
+                <SelectItem key={size} value={String(size)}>
+                  {size}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span>per page</span>
+        </div>
+
+        {hasResults && (
+          <p className="text-sm text-muted-foreground">
             Showing <span className="font-medium text-foreground">{firstResult}</span>–
             <span className="font-medium text-foreground">{lastResult}</span> of{' '}
             <span className="font-medium text-foreground">{total}</span>{' '}
             {total === 1 ? 'result' : 'results'}
-          </>
-        ) : (
-          'No results'
+          </p>
         )}
-      </p>
+      </div>
 
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label="First page"
-          disabled={page <= 1}
-          onClick={() => onPageChange(1)}
-        >
-          <ChevronsLeft />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label="Previous page"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-        >
-          <ChevronLeft />
-        </Button>
-
-        {pages.map((item, index) =>
-          item === 'dots' ? (
-            <span
-              key={`dots-${index}`}
-              className="px-1 text-sm text-muted-foreground select-none"
-              aria-hidden
-            >
-              …
-            </span>
-          ) : (
-            <Button
-              key={item}
-              variant={item === page ? 'default' : 'ghost'}
-              size="icon"
-              className={cn('size-8', item === page && 'pointer-events-none')}
-              aria-label={`Page ${item}`}
-              aria-current={item === page ? 'page' : undefined}
-              onClick={() => onPageChange(item)}
-            >
-              {item}
-            </Button>
-          ),
-        )}
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label="Next page"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-        >
-          <ChevronRight />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label="Last page"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(totalPages)}
-        >
-          <ChevronsRight />
-        </Button>
+      {/* Row 2 (mobile): centered controls / inline (desktop) */}
+      <div className="flex justify-center md:justify-start">
+        {pageControls}
       </div>
     </div>
   )

@@ -235,7 +235,7 @@ function ToolButton({
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 text-muted-foreground hover:text-foreground"
+          className="size-8 text-muted-foreground hover:text-foreground max-md:size-10 max-md:[&_svg]:size-5"
           aria-label={title}
           onClick={onClick}
         >
