@@ -366,13 +366,13 @@ export default function Sidebar({
         drawerOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
         // Desktop: mutually exclusive width classes so Tailwind ordering never causes conflicts,
         // plus a smooth width transition on collapse/expand.
-        sidebarCollapsed ? "md:w-0 md:border-r-0" : "md:w-68 lg:w-80",
+        sidebarCollapsed ? "md:w-0 md:border-r-0" : "md:w-68 xl:w-80",
         "md:transition-[width] md:duration-300 md:ease-in-out",
       )}
     >
       {/* Inner content stays put and only fades (no translate) as the aside collapses its width. The
           quicker opacity fade masks the width-clip so it reads as a clean fade-out, not a shift. */}
-      <div className="flex h-full w-80 md:w-68 lg:w-80 flex-col">
+      <div className="flex h-full w-80 md:w-68 xl:w-80 flex-col">
         <nav className="flex-1 overflow-y-auto px-2 py-3">
           {proj ? (
             <>
