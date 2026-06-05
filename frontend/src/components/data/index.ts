@@ -1,4 +1,5 @@
 export { default as List } from './List'
+export type { ListApi } from './List'
 export { default as Table } from './Table'
 export { default as Pagination, getPaginationRange } from './Pagination'
 export {

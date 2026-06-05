@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: (u.user_metadata?.name as string | undefined) ?? null,
       role: 'basic',
       created_at: u.created_at ?? new Date().toISOString(),
+      avatar_url: null,
     })
 
     const sync = async (authUser: User | null, token: string | null) => {

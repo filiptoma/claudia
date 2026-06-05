@@ -39,14 +39,6 @@ interface FilterState {
   createdTo: string
 }
 
-const EMPTY_FILTERS: FilterState = {
-  search: '',
-  owner: '',
-  updatedFrom: '',
-  updatedTo: '',
-  createdFrom: '',
-  createdTo: '',
-}
 
 function toFilterList(f: FilterState): Filter[] {
   const out: Filter[] = []
