@@ -111,84 +111,37 @@ export function stepWidth(current: number, dir: 1 | -1): number {
 
 export const clampImageWidth = clampWidth
 
-// A breakpoint in the raw→preprocessed offset map: at every raw offset >= `raw`, add `shift` to get
-// the corresponding offset in the preprocessed string. `shift` is cumulative and non-decreasing.
-export interface OffsetShift {
-  raw: number
-  shift: number
-}
-
 /**
  * Move HackMD `=WxH` size hints into a private `#mdsize=WxH` URL fragment so react-markdown parses
  * the image (it otherwise rejects the bare `=WxH` suffix and renders the whole thing as text).
  * Fenced code blocks are left untouched so example markdown still displays verbatim.
- *
- * Returns the rewritten text AND the offset map needed to translate positions in the rewritten
- * string back to offsets in the original `content` (the rewrite changes lengths). The map is derived
- * from the exact replacement performed here, so it can never drift from the text.
  */
-export function preprocessImageSizesMapped(content: string): { text: string; map: OffsetShift[] } {
-  const map: OffsetShift[] = []
-  if (!content.includes('=')) return { text: content, map } // fast path: no possible size hint
+export function preprocessImageSizes(content: string): string {
+  if (!content.includes('=')) return content // fast path: no possible size hint
   let inFence = false
   let fenceChar = ''
-  let shift = 0
-  let rawOffset = 0
-  const out: string[] = []
-  for (const text of content.split('\n')) {
-    const fence = text.match(FENCE_RE)
-    if (fence) {
-      const ch = fence[1][0]
-      if (!inFence) {
-        inFence = true
-        fenceChar = ch
-      } else if (ch === fenceChar) {
-        inFence = false
-      }
-      out.push(text)
-    } else if (inFence) {
-      out.push(text)
-    } else {
-      let line = ''
-      let last = 0
-      for (const m of text.matchAll(imageRe())) {
-        const start = m.index ?? 0
-        const full = m[0]
-        line += text.slice(last, start)
-        const w = m[4]
-        const h = m[5]
-        if (!w && !h) {
-          line += full
-        } else {
-          const titlePart = m[3] ? ` "${m[3]}"` : ''
-          const replacement = `![${m[1]}](${m[2]}#mdsize=${w || ''}x${h || ''}${titlePart})`
-          line += replacement
-          shift += replacement.length - full.length
-          map.push({ raw: rawOffset + start + full.length, shift }) // shift applies after the token
+  return content
+    .split('\n')
+    .map((text) => {
+      const fence = text.match(FENCE_RE)
+      if (fence) {
+        const ch = fence[1][0]
+        if (!inFence) {
+          inFence = true
+          fenceChar = ch
+        } else if (ch === fenceChar) {
+          inFence = false
         }
-        last = start + full.length
+        return text
       }
-      line += text.slice(last)
-      out.push(line)
-    }
-    rawOffset += text.length + 1 // +1 for the consumed '\n'
-  }
-  return { text: out.join('\n'), map }
-}
-
-/** As above, but returns only the rewritten text (the renderer doesn't need the map). */
-export function preprocessImageSizes(content: string): string {
-  return preprocessImageSizesMapped(content).text
-}
-
-/** Translate an offset in the preprocessed string back to its offset in the original content. */
-export function preprocessedToRaw(pp: number, map: OffsetShift[]): number {
-  let shift = 0
-  for (const b of map) {
-    if (pp >= b.raw + b.shift) shift = b.shift
-    else break
-  }
-  return pp - shift
+      if (inFence) return text
+      return text.replace(imageRe(), (full, alt, url, title, w, h) => {
+        if (!w && !h) return full
+        const titlePart = title ? ` "${title}"` : ''
+        return `![${alt}](${url}#mdsize=${w || ''}x${h || ''}${titlePart})`
+      })
+    })
+    .join('\n')
 }
 
 /** Read the `#mdsize=WxH` fragment a preprocessed src may carry. Returns the cleaned src + size. */
