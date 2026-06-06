@@ -29,8 +29,9 @@ export default function UserProfilePage() {
 
     async function load() {
       if (!userId) return
-      // Fetch public profile via RPC (safe — only returns if user has public projects)
-      const { data: profileData } = await supabase.rpc('get_public_profile', { p_user: userId })
+      // Fetch profile by ID — returns data regardless of public project count so we can
+      // distinguish "user not found" from "user exists but has no public projects yet".
+      const { data: profileData } = await supabase.rpc('get_profile_by_id', { p_user: userId })
       const p = (
         profileData as { id: string; name: string | null; avatar_url: string | null }[] | null
       )?.[0] ?? null
@@ -79,7 +80,7 @@ export default function UserProfilePage() {
         </span>
         <h1 className="text-xl font-semibold">Profile not found</h1>
         <p className="text-sm text-muted-foreground">
-          This user doesn't exist or hasn't published any projects yet.
+          This user doesn't exist.
         </p>
         <Button variant="outline" asChild>
           <Link to="/">Go home</Link>
