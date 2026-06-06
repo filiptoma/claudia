@@ -161,7 +161,7 @@ export default function Home() {
                 Your private space — organize notes into folders, or jot something down in seconds.
               </div>
             </div>
-            <div className="flex shrink-0 gap-2 max-md:flex-wrap">
+            <div className="flex flex-col gap-2 lg:flex-row lg:shrink-0">
               <Button variant="accent" onClick={() => void onQuickNote()}>
                 <StickyNote /> New quick note
               </Button>

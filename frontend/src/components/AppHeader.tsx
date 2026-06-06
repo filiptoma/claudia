@@ -593,7 +593,7 @@ function HeaderShell({
           <Menu className="size-4.5" />
         </Button>
       </div>
-      <div className="flex min-w-0 flex-1 items-center pl-2 pr-1 md:pl-3">
+      <div className="flex min-w-0 flex-1 items-center pl-2 pr-1 lg:pr-2 md:pl-3">
         <Breadcrumbs items={items} />
       </div>
       {actions && (
