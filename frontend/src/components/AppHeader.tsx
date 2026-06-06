@@ -538,7 +538,7 @@ function HeaderShell({
 }) {
   const { collapsed, toggle, openMobile } = useSidebar();
   return (
-    <header className="flex h-13 shrink-0 items-center border-b border-border bg-background/80 px-2 backdrop-blur-sm sm:px-3">
+    <header className="flex h-13 shrink-0 items-center border-b border-border bg-background/80 px-2 backdrop-blur-sm md:px-3">
       {/* Brand zone: logo. Always visible regardless of sidebar state. On mobile the app name text
           is hidden so we pull in the padding significantly to reclaim horizontal space. */}
       <Link
@@ -558,7 +558,7 @@ function HeaderShell({
           aria-hidden
           className="hidden size-7 dark:block"
         />
-        <span className="max-sm:hidden">{APP_NAME}</span>
+        <span className="max-md:hidden">{APP_NAME}</span>
       </Link>
       <div className="border-r border-border h-13 flex items-center justify-center px-1">
         {/* Desktop: collapse/expand sidebar */}

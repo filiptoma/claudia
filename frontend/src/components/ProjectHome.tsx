@@ -24,7 +24,7 @@ import type { DocMeta } from '../hooks/useTree'
 import type { Folder } from '../lib/types'
 
 // Wider, 3-up grid so longer titles wrap to two lines instead of truncating.
-const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
+const GRID = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'
 
 // Up to 5 quick-note cards + the "View all" cell fill two rows of three on large screens.
 const WORKSPACE_NOTE_LIMIT = 5

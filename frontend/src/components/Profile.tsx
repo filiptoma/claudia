@@ -20,7 +20,7 @@ import PageHeader from './PageHeader'
 import SectionHeader from './SectionHeader'
 import type { Project } from '../lib/types'
 
-const GRID = 'grid grid-cols-1 gap-3 sm:grid-cols-2'
+const GRID = 'grid grid-cols-1 gap-3 md:grid-cols-2'
 
 export default function Profile() {
   const { user, uid, role, isStaff, isAdmin, loading, logout, refreshProfile } = useAuth()

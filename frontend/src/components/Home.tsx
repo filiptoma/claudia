@@ -19,7 +19,7 @@ import MobileHome from './MobileHome'
 import { ProjectGlyph, WorkspaceIcon } from './EntityIcons'
 import type { Project } from '../lib/types'
 
-const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
+const GRID = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'
 
 function FeedbackCta() {
   return (
@@ -151,7 +151,7 @@ export default function Home() {
       {workspace && (
         <section className="mb-8 max-md:mb-6">
           <h2 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">My Workspace</h2>
-          <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card bg-linear-to-br from-primary/10 to-accent2/10 p-6 shadow-sm sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card bg-linear-to-br from-primary/10 to-accent2/10 p-6 shadow-sm md:flex-row md:items-center">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm shadow-primary/25 [&_svg]:size-7">
               <WorkspaceIcon />
             </span>
@@ -161,7 +161,7 @@ export default function Home() {
                 Your private space — organize notes into folders, or jot something down in seconds.
               </div>
             </div>
-            <div className="flex shrink-0 gap-2 max-sm:flex-wrap">
+            <div className="flex shrink-0 gap-2 max-md:flex-wrap">
               <Button variant="accent" onClick={() => void onQuickNote()}>
                 <StickyNote /> New quick note
               </Button>

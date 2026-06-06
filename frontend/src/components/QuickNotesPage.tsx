@@ -13,7 +13,7 @@ import { QuickNoteIcon } from './EntityIcons'
 import type { MenuAction } from './ActionsMenu'
 import type { DocMeta } from '../hooks/useTree'
 
-const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
+const GRID = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'
 
 export default function QuickNotesPage() {
   const { projectSlug } = useParams()

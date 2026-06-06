@@ -202,7 +202,7 @@ function FiltersBar({
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Title or slug</Label>
           <FilterInput
@@ -224,7 +224,7 @@ function FiltersBar({
         </div>
       </div>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
         <DateRangeField
           label="Last edited"
           from={urlFilters.updatedFrom}
@@ -300,7 +300,7 @@ function ProjectsList({
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {api.data.map((p) => (
             <PublicProjectCard key={p.id} project={p} />
           ))}
