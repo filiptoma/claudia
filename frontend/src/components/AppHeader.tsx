@@ -122,9 +122,11 @@ export default function AppHeader() {
       />
     ) : null;
 
-  // The ModeSwitch only renders for editors, who default to split. We set the param explicitly (no
-  // delete-on-view) so that switching to View sticks — an absent param now means split, not view.
-  const mode = ((searchParams.get("mode") as Mode) || "split") as Mode;
+  // Desktop defaults to split; mobile mirrors DocumentBody: view for regular docs, edit for quick
+  // notes. An explicit ?mode= param always wins. We write it back on change so the selection sticks.
+  const urlMode = searchParams.get("mode") as Mode | null;
+  const mobileModeDefault: Mode = doc?.is_quick_note ? "edit" : "view";
+  const mode: Mode = urlMode ?? (isMobile ? mobileModeDefault : "split");
   const setMode = (m: Mode) => {
     setSearchParams(
       (prev) => {
