@@ -4,7 +4,7 @@ import { BookOpen, Layers } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { projectPath, publicProjectsPath } from '../lib/paths'
-import ProfileAvatar from './ProfileAvatar'
+import { AvatarCircle } from './ProfileAvatar'
 import ProjectCard from './ProjectCard'
 import PageLayout from './PageLayout'
 import SectionHeader from './SectionHeader'
@@ -96,12 +96,11 @@ export default function UserProfilePage() {
     <PageLayout variant="medium">
       {/* Profile header */}
       <div className="mb-8 flex items-center gap-4">
-        <ProfileAvatar
+        <AvatarCircle
           userId={profile.id}
           name={profile.name}
           email={null}
           avatarUrl={profile.avatar_url}
-          variant="tooltip"
           size="lg"
         />
         <div>
