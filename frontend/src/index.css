@@ -4,9 +4,10 @@
 /* Dark mode is driven by a `.dark` class on <html> (set before first paint in index.html). */
 @custom-variant dark (&:is(.dark *));
 
-/* iOS/iPadOS auto-zooms when a focused input has font-size < 16px. Override to 16px on touch
-   devices only so desktop sizing is unaffected. Pinch-to-zoom remains fully functional. */
-@supports (-webkit-touch-callout: none) {
+/* iOS/iPadOS auto-zooms when a focused input has font-size < 16px. Using pointer: coarse
+   targets all touch devices (Safari, Chrome, Firefox) without relying on WebKit-only
+   @supports queries. Pinch-to-zoom remains fully functional. */
+@media (pointer: coarse) {
   input, textarea, select {
     font-size: 16px;
   }
