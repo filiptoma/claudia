@@ -82,7 +82,7 @@ export default function ProjectSettings() {
 
   useDocumentTitle(project ? `${project.name} · Settings` : undefined)
 
-  const [isPublic, setIsPublic] = useState(false)
+  const [isPublic, setIsPublic] = useState(project?.is_public ?? false)
   const [members, setMembers] = useState<MemberInfo[] | null>(null)
   const [owner, setOwner] = useState<{ id: string; name: string | null; email: string | null; avatar_url: string | null } | null>(null)
   const [inviteRole, setInviteRole] = useState<MemberRole>('viewer')
