@@ -14,7 +14,6 @@ import type { Capture, HighlightName } from '../lib/anchor'
 import { useAnnotationActions, useDocumentComments, useDocumentSuggestions } from './useAnnotations'
 import { DRAFT_KEY } from '../context/AnnotationContext'
 import type { AnnotationContextValue, Draft, VirtualAnchor } from '../context/AnnotationContext'
-import { useAnnotationRail } from '../context/AnnotationRailContext'
 import SelectionToolbar from '../components/annotations/SelectionToolbar'
 import AnnotationSidebar from '../components/annotations/AnnotationSidebar'
 import AnnotationFloatingPanel from '../components/annotations/AnnotationFloatingPanel'
@@ -128,7 +127,6 @@ export function useAnnotationEngine({
 }): AnnotationEngine {
   const { uid } = useAuth()
   const { focusMode, listMode } = useAnnotationLayout()
-  const { setOpen: setRailOpen } = useAnnotationRail()
   const { threads, messagesByThread } = useDocumentComments(docId)
   const { suggestions, messagesBySuggestion } = useDocumentSuggestions(docId)
   const actions = useAnnotationActions(docId)
@@ -180,14 +178,6 @@ export function useAnnotationEngine({
     setDocEl(docRef.current)
     setBoundaryEl(docRef.current ? getClipContainer(docRef.current) : null)
   }, [docRef])
-
-  // Reserve layout room for the docked rail (only in 'sidebar' mode — the bottom sheet overlays). The
-  // layout shifts the document content aside; reset on close / unmount so other pages aren't padded.
-  const reserveRail = listMode === 'sidebar' && sidebarOpen
-  useEffect(() => {
-    setRailOpen(reserveRail)
-    return () => setRailOpen(false)
-  }, [setRailOpen, reserveRail])
 
   // Only unresolved comments and pending suggestions are shown inline (highlights, margin dots, the
   // inline diff). Resolved comments and accepted/rejected suggestions live only in the sidebar.

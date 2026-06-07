@@ -4,7 +4,6 @@ import Sidebar from './Sidebar'
 import AppHeader from './AppHeader'
 import { SidebarContext } from '../context/SidebarContext'
 import { AnnotationRailContext } from '../context/AnnotationRailContext'
-import { cn } from '@/lib/utils'
 
 // Shell shared by every route: a full-width app bar (logo + sidebar toggle + breadcrumbs + actions)
 // on top, with the collapsible sidebar and the scrollable <Outlet> below it. The sidebar's collapsed
@@ -12,9 +11,9 @@ import { cn } from '@/lib/utils'
 export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  // Mirrors the document page's comments/suggestions rail open state (published by the annotation
-  // engine) so the content region can reserve room for the docked rail instead of being overlaid.
-  const [railOpen, setRailOpen] = useState(false)
+  // The document page portals its docked comments/suggestions rail into this in-flow slot (a flex
+  // sibling of <main>), so the rail shifts content aside like the nav sidebar instead of floating.
+  const [railSlot, setRailSlot] = useState<HTMLDivElement | null>(null)
   const sidebar = useMemo(
     () => ({
       collapsed,
@@ -23,7 +22,7 @@ export default function AppLayout() {
     }),
     [collapsed],
   )
-  const rail = useMemo(() => ({ open: railOpen, setOpen: setRailOpen }), [railOpen])
+  const rail = useMemo(() => ({ slot: railSlot }), [railSlot])
 
   return (
     <SidebarContext.Provider value={sidebar}>
@@ -38,20 +37,14 @@ export default function AppLayout() {
                 onClick={() => setDrawerOpen(false)}
               />
             )}
-            <main
-              className={cn(
-                'relative flex min-w-0 flex-1 flex-col overflow-hidden',
-                // Dock the comments/suggestions rail: reserve its width (matching its w-74 xl:w-88) so
-                // the document shifts left instead of sitting under it. The rail itself is fixed to this
-                // same right-hand strip.
-                'transition-[padding] duration-200 ease-in-out',
-                railOpen && 'pr-74 xl:pr-88',
-              )}
-            >
+            <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <Outlet />
               </div>
             </main>
+            {/* Docked comments/suggestions rail mounts here (portaled by the document page). Empty —
+                hence zero width — on every other route and when the rail is closed. */}
+            <div ref={setRailSlot} className="flex shrink-0" />
           </div>
         </div>
       </AnnotationRailContext.Provider>

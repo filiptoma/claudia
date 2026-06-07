@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AtSign, Check, ChevronDown, ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,6 +9,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAnnotationCtx, DRAFT_KEY } from "../../context/AnnotationContext";
+import { useAnnotationRail } from "../../context/AnnotationRailContext";
 import CommentThreadCard from "./CommentThreadCard";
 import SuggestionCard from "./SuggestionCard";
 
@@ -299,12 +301,14 @@ function SidebarBody() {
 }
 
 /**
- * The annotation list. Rendered as a fixed right rail (`listMode === 'sidebar'`: desktops, laptops,
- * landscape tablets) or a full-height bottom sheet (`listMode === 'sheet'`: phones and portrait
- * tablets). Selecting a card never closes it; closing it clears the selection.
+ * The annotation list. Rendered as a docked right rail in normal flow (`listMode === 'sidebar'`:
+ * desktops, laptops, landscape tablets — portaled into AppLayout so it shifts content aside) or a
+ * full-height bottom sheet (`listMode === 'sheet'`: phones and portrait tablets). Selecting a card
+ * never closes it; closing it clears the selection.
  */
 export default function AnnotationSidebar() {
   const { sidebarOpen, closeSidebar, listMode } = useAnnotationCtx();
+  const { slot: railSlot } = useAnnotationRail();
 
   const header = (
     <div
@@ -330,19 +334,23 @@ export default function AnnotationSidebar() {
   );
 
   if (listMode === "sidebar") {
-    return (
+    // Docked rail rendered in normal flow (portaled into AppLayout's flex row), so opening it shifts the
+    // document aside exactly like the nav sidebar — not a fixed overlay. The outer element animates its
+    // width; the inner fixed-width content is clipped by overflow so it doesn't reflow while opening.
+    if (!railSlot) return null;
+    return createPortal(
       <aside
         className={cn(
-          // Docked rail: reserves its width via AppLayout (the content shifts), so it reads as part of
-          // the layout (border, no floating shadow) rather than an overlay.
-          "fixed top-[calc(3.25rem+env(safe-area-inset-top))] right-0 bottom-0 z-30 flex w-74 xl:w-88 flex-col border-l border-border bg-background",
-          "transition-transform duration-200",
-          sidebarOpen ? "translate-x-0" : "translate-x-full",
+          "flex h-full shrink-0 flex-col overflow-hidden bg-background transition-[width] duration-200 ease-in-out",
+          sidebarOpen ? "w-74 xl:w-88 border-l border-border" : "w-0",
         )}
       >
-        {header}
-        <SidebarBody />
-      </aside>
+        <div className="flex h-full w-74 xl:w-88 flex-col">
+          {header}
+          <SidebarBody />
+        </div>
+      </aside>,
+      railSlot,
     );
   }
 
