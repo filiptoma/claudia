@@ -333,7 +333,9 @@ export default function AnnotationSidebar() {
     return (
       <aside
         className={cn(
-          "fixed top-[calc(3.25rem+env(safe-area-inset-top))] right-0 bottom-0 z-30 flex w-74 xl:w-88 flex-col border-l border-border bg-background shadow-2xl",
+          // Docked rail: reserves its width via AppLayout (the content shifts), so it reads as part of
+          // the layout (border, no floating shadow) rather than an overlay.
+          "fixed top-[calc(3.25rem+env(safe-area-inset-top))] right-0 bottom-0 z-30 flex w-74 xl:w-88 flex-col border-l border-border bg-background",
           "transition-transform duration-200",
           sidebarOpen ? "translate-x-0" : "translate-x-full",
         )}
