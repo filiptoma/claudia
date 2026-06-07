@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
 import { useRouteContext } from '../hooks/useRouteContext'
-import { canCommentProject, canEditProject } from '../lib/access'
+import { canCommentDocument, canEditDocument } from '../lib/access'
 import { docLabel } from '../lib/labels'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { APP_NAME } from '../lib/brand'
@@ -10,15 +10,16 @@ import { Button } from '@/components/ui/button'
 import DocumentBody from './DocumentBody'
 
 export default function DocPage() {
-  const { project, doc: meta } = useRouteContext()
+  const { project, folder, doc: meta } = useRouteContext()
   const { role, uid } = useAuth()
   const { members } = useTree()
 
   const myMemberRole = project
     ? members.find((m) => m.project_id === project.id && m.user_id === uid)?.role
     : undefined
-  const canEdit = project ? canEditProject(project, role, uid, myMemberRole) : false
-  const canComment = project ? canCommentProject(project, role, uid, myMemberRole) : false
+  // Effective access folds in the document's cap AND its parent folder's cap (migrations 0018/0020).
+  const canEdit = project && meta ? canEditDocument(project, meta, folder, role, uid, myMemberRole) : false
+  const canComment = project && meta ? canCommentDocument(project, meta, folder, role, uid, myMemberRole) : false
 
   // Tab title is the document's own title (covers regular docs and quick notes alike).
   useDocumentTitle(meta ? docLabel(meta) : APP_NAME)

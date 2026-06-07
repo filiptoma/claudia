@@ -9,6 +9,7 @@ import {
 import {
   FilePlus,
   FolderPlus,
+  Lock,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
@@ -28,9 +29,12 @@ import { useTreeActions } from "../hooks/useTreeActions";
 import { useRouteContext } from "../hooks/useRouteContext";
 import { useQuickNotes } from "../hooks/useQuickNotes";
 import {
-  canCommentProject,
+  canCommentDocument,
   canConfigureProject,
+  canEditDocument,
+  canEditFolder,
   canEditProject,
+  canSetPermissions,
   projectVisibility,
 } from "../lib/access";
 import {
@@ -47,6 +51,7 @@ import type { Crumb } from "./Breadcrumbs";
 import ActionsMenu from "./ActionsMenu";
 import type { MenuAction } from "./ActionsMenu";
 import CreateMenu from "./CreateMenu";
+import { usePermissionsDialog } from "../context/PermissionsDialogContext";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -82,6 +87,7 @@ export default function AppHeader() {
 
   const params = useParams();
   const { workspace, notes, findNote } = useQuickNotes();
+  const permissions = usePermissionsDialog();
 
   const memberCount = useMemo(
     () =>
@@ -274,7 +280,6 @@ export default function AppHeader() {
     (m) => m.project_id === project.id && m.user_id === uid,
   )?.role;
   const canEdit = canEditProject(project, role, uid, myMemberRole);
-  const canComment = canCommentProject(project, role, uid, myMemberRole);
   const canConfigure = canConfigureProject(project, role, uid);
   const isSettings = location.pathname === projectSettingsPath(project.slug);
   const visibility = projectVisibility(project, memberCount);
@@ -304,6 +309,10 @@ export default function AppHeader() {
 
   // ----- document view -----
   if (doc) {
+    // Gate this view on the DOCUMENT'S effective permissions (folds in the document + parent-folder
+    // caps), so a doc the owner locked to "view only" hides edit/comment affordances from everyone else.
+    const docCanEdit = canEditDocument(project, doc, folder, role, uid, myMemberRole);
+    const docCanComment = canCommentDocument(project, doc, folder, role, uid, myMemberRole);
     const items: Crumb[] = [projectCrumb];
     if (folder)
       items.push({
@@ -314,7 +323,7 @@ export default function AppHeader() {
     items.push({
       label: docLabel(doc),
       icon: <DocIcon className={ICON_CLS} />,
-      editable: canEdit
+      editable: docCanEdit
         ? {
             id: doc.id,
             value: doc.title,
@@ -329,10 +338,28 @@ export default function AppHeader() {
         icon: <Pencil />,
         onSelect: () => void actions.editDocument(doc),
       },
+      // Only the project owner may cap a single document's permissions.
+      ...(canSetPermissions(project, uid)
+        ? [
+            {
+              label: "Permissions",
+              icon: <Lock />,
+              separatorBefore: true,
+              onSelect: () =>
+                permissions.open({
+                  kind: "document",
+                  id: doc.id,
+                  name: docLabel(doc),
+                  accessOverride: doc.access_override,
+                }),
+            } satisfies MenuAction,
+          ]
+        : []),
       {
         label: "Delete",
         icon: <Trash2 />,
         danger: true,
+        separatorBefore: true,
         onSelect: async () => {
           if (await actions.deleteDocument(doc))
             navigate(
@@ -347,9 +374,9 @@ export default function AppHeader() {
       <HeaderShell
         items={items}
         actions={
-          canEdit || canComment || ownerAvatar ? (
+          docCanEdit || docCanComment || ownerAvatar ? (
             <>
-              {canEdit && (
+              {docCanEdit && (
                 <>
                   <SaveIndicator />
                   {ownerAvatar}
@@ -361,7 +388,7 @@ export default function AppHeader() {
                   />
                 </>
               )}
-              {!canEdit && canComment && (
+              {!docCanEdit && docCanComment && (
                 // Commenters suggest edits via split (desktop) or, since split is unavailable on
                 // mobile, via edit mode (suggestion mode) on mobile.
                 <ModeSwitch
@@ -372,7 +399,7 @@ export default function AppHeader() {
                   }
                 />
               )}
-              {!canEdit && ownerAvatar}
+              {!docCanEdit && ownerAvatar}
             </>
           ) : null
         }
@@ -382,12 +409,14 @@ export default function AppHeader() {
 
   // ----- folder view -----
   if (folder) {
+    // Fold the folder's own cap into its edit gate, so a locked folder hides its edit affordances.
+    const folderCanEdit = canEditFolder(project, folder, role, uid, myMemberRole);
     const items: Crumb[] = [
       projectCrumb,
       {
         label: folder.name,
         icon: <FolderGlyph className={ICON_CLS} />,
-        editable: canEdit
+        editable: folderCanEdit
           ? {
               id: folder.id,
               value: folder.name,
@@ -402,10 +431,28 @@ export default function AppHeader() {
         icon: <Pencil />,
         onSelect: () => void actions.editFolder(folder),
       },
+      // Only the project owner may cap a folder's permissions (covers the folder + its documents).
+      ...(canSetPermissions(project, uid)
+        ? [
+            {
+              label: "Permissions",
+              icon: <Lock />,
+              separatorBefore: true,
+              onSelect: () =>
+                permissions.open({
+                  kind: "folder",
+                  id: folder.id,
+                  name: folder.name,
+                  accessOverride: folder.access_override,
+                }),
+            } satisfies MenuAction,
+          ]
+        : []),
       {
         label: "Delete folder",
         icon: <Trash2 />,
         danger: true,
+        separatorBefore: true,
         onSelect: async () => {
           if (await actions.deleteFolder(folder))
             navigate(projectPath(project.slug));
@@ -417,9 +464,9 @@ export default function AppHeader() {
       <HeaderShell
         items={items}
         actions={
-          canEdit || ownerAvatar ? (
+          folderCanEdit || ownerAvatar ? (
             <>
-              {canEdit && (
+              {folderCanEdit && (
                 <>
                   {!folderEmpty && (
                     <CreateMenu
@@ -448,7 +495,7 @@ export default function AppHeader() {
                   />
                 </>
               )}
-              {!canEdit && ownerAvatar}
+              {!folderCanEdit && ownerAvatar}
             </>
           ) : null
         }

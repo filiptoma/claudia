@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquare } from 'lucide-react'
+import { Check, Copy, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
 // Nearest scroll container by overflow style (the page scroll area in read mode, the preview pane in
@@ -15,11 +17,47 @@ function getScrollParent(el: HTMLElement): HTMLElement | null {
   return null
 }
 
+// Copies the rendered document's markdown SOURCE to the clipboard, flashing a check for ~1.5s.
+function CopyMarkdownButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      window.clearTimeout(timer.current)
+      timer.current = window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      toast('error', 'Couldn’t copy to clipboard')
+    }
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => void onCopy()}
+          aria-label="Copy markdown"
+          className="gap-1.5 text-muted-foreground"
+        >
+          {copied ? <Check className="size-4 text-primary" /> : <Copy className="size-4" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{copied ? 'Copied!' : 'Copy markdown'}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 /**
  * The toolbar pinned to the top of a rendered-markdown view (read mode, or the split editor's preview
  * pane) — the counterpart of the editor's formatting toolbar, and the SAME component in both places.
- * It holds the button that opens the comments & suggestions sidebar, badged with the count of
- * unresolved comments + suggestions.
+ * It holds a "copy markdown" button (always available) and, when commenting is in play, the button
+ * that opens the comments & suggestions sidebar, badged with the count of unresolved annotations.
  *
  * It is rendered as the first child INSIDE its scroll container (`sticky top-0`), and auto-hides when
  * the reader scrolls down, reappearing on scroll up — like a typical app bar.
@@ -27,10 +65,16 @@ function getScrollParent(el: HTMLElement): HTMLElement | null {
 export default function AnnotationToolbar({
   count,
   onOpenSidebar,
+  content,
+  showComments = true,
   className,
 }: {
   count: number
   onOpenSidebar: () => void
+  /** The markdown source backing this view — copied verbatim by the copy button. */
+  content: string
+  /** Show the comments/suggestions sidebar button. Hidden for plain viewers with nothing to read. */
+  showComments?: boolean
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -61,27 +105,30 @@ export default function AnnotationToolbar({
     <div
       ref={ref}
       className={cn(
-        'sticky top-0 z-20 flex h-11 shrink-0 items-center justify-end border-b border-border bg-background px-2.5',
+        'sticky top-0 z-20 flex h-11 shrink-0 items-center justify-end gap-0.5 border-b border-border bg-background px-2.5',
         'transition-transform duration-200',
         hidden && '-translate-y-full',
         className,
       )}
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={onOpenSidebar}
-        aria-label="Open comments and suggestions"
-        className="gap-1.5 text-muted-foreground"
-      >
-        <MessageSquare className="size-4" />
-        {count > 0 && (
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] font-bold leading-none text-primary-foreground">
-            {count > 99 ? '99+' : count}
-          </span>
-        )}
-      </Button>
+      <CopyMarkdownButton content={content} />
+      {showComments && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onOpenSidebar}
+          aria-label="Open comments and suggestions"
+          className="gap-1.5 text-muted-foreground"
+        >
+          <MessageSquare className="size-4" />
+          {count > 0 && (
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] font-bold leading-none text-primary-foreground">
+              {count > 99 ? '99+' : count}
+            </span>
+          )}
+        </Button>
+      )}
     </div>
   )
 }

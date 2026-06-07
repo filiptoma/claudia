@@ -12,6 +12,7 @@ export type DocMeta = Pick<
   | 'folder_id'
   | 'sort_order'
   | 'is_quick_note'
+  | 'access_override'
   | 'created_at'
   | 'updated_at'
 >
@@ -63,7 +64,7 @@ export function useTree() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('documents')
-        .select('id,title,slug,project_id,folder_id,sort_order,is_quick_note,created_at,updated_at')
+        .select('id,title,slug,project_id,folder_id,sort_order,is_quick_note,access_override,created_at,updated_at')
         .order('sort_order')
         .order('title')
       if (error) throw new Error(error.message)

@@ -117,9 +117,12 @@ function slashContext(state: EditorState): { from: number; query: string } | nul
   const head = state.selection.main.head
   const line = state.doc.lineAt(head)
   const before = state.sliceDoc(line.from, head)
-  const m = /(^|\s)\/(\S*)$/.exec(before)
+  // Trigger on the '/' nearest the caret — including one typed straight after text ("something/"),
+  // not only at line start or after whitespace. The query runs from that '/' to the caret and stops
+  // at the next '/' or whitespace, so the closest slash is always the active one.
+  const m = /\/([^\s/]*)$/.exec(before)
   if (!m) return null
-  return { from: line.from + m.index + m[1].length, query: m[2] }
+  return { from: line.from + m.index, query: m[1] }
 }
 
 // Commands matching the typed query (matched against the label and the keyword list).
@@ -973,7 +976,11 @@ function EditorPreview({
   return (
     <AnnotationContext.Provider value={eng.ctx}>
       <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto">
-        <AnnotationToolbar count={eng.pendingCount} onOpenSidebar={() => eng.ctx.setSidebarOpen(true)} />
+        <AnnotationToolbar
+          count={eng.pendingCount}
+          onOpenSidebar={() => eng.ctx.setSidebarOpen(true)}
+          content={content}
+        />
         <div
           ref={docRef}
           onClick={eng.onDocClick}

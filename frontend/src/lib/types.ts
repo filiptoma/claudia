@@ -65,6 +65,9 @@ export interface Folder {
   name: string
   slug: string
   project_id: string
+  /** Per-folder permission cap for everyone except the owner — caps the folder AND its documents.
+   *  NULL = inherit. See migration 0020 and [[DocumentRec.access_override]]. */
+  access_override: MemberRole | null
   sort_order: number
 }
 
@@ -77,6 +80,12 @@ export interface DocumentRec {
   content: string
   /** A quick note has no title and a short nanoid slug; it lives at the workspace root. */
   is_quick_note: boolean
+  /**
+   * Per-document permission cap for everyone EXCEPT the project owner. NULL = inherit the project
+   * role (default). Otherwise it can only restrict: 'commenter' downgrades editors to comment/suggest,
+   * 'viewer' makes the document read-only for non-owners. Enforced in the DB (see migration 0018).
+   */
+  access_override: MemberRole | null
   sort_order: number
   created_at: string
   updated_at: string

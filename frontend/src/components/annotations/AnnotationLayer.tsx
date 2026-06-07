@@ -41,7 +41,9 @@ export default function AnnotationLayer({
     floatingTop: VIEW_FLOATING_TOP,
   })
 
-  const showToolbar = canComment || eng.hasAnnotations
+  // The comments/suggestions button only makes sense when the user can comment or there's something
+  // to read; the toolbar itself always shows so the copy-markdown button is available to everyone.
+  const showComments = canComment || eng.hasAnnotations
 
   // Bottom padding: when the touch focus sheet (short bottom sheet) is active, push content above it.
   const docPaddingBottom =
@@ -51,9 +53,12 @@ export default function AnnotationLayer({
 
   return (
     <AnnotationContext.Provider value={eng.ctx}>
-      {showToolbar && (
-        <AnnotationToolbar count={eng.pendingCount} onOpenSidebar={() => eng.ctx.setSidebarOpen(true)} />
-      )}
+      <AnnotationToolbar
+        count={eng.pendingCount}
+        onOpenSidebar={() => eng.ctx.setSidebarOpen(true)}
+        content={content}
+        showComments={showComments}
+      />
 
       <div className="relative w-full">
         <div

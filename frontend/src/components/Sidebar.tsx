@@ -9,6 +9,7 @@ import {
   FilePlus,
   FolderPlus,
   Lightbulb,
+  Lock,
   LogOut,
   Moon,
   MoreHorizontal,
@@ -39,9 +40,13 @@ import { useQuickNotes } from "../hooks/useQuickNotes";
 import { useSidebar } from "../context/SidebarContext";
 import {
   canConfigureProject,
+  canEditDocument,
+  canEditFolder,
   canEditProject,
+  canSetPermissions,
   projectVisibility,
 } from "../lib/access";
+import { usePermissionsDialog } from "../context/PermissionsDialogContext";
 import {
   docPath,
   docSplitPath,
@@ -68,7 +73,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { MemberRole, Project, Visibility } from "../lib/types";
+import type { Folder, MemberRole, Project, Visibility } from "../lib/types";
 
 export default function Sidebar({
   drawerOpen,
@@ -90,6 +95,7 @@ export default function Sidebar({
   const actions = useTreeActions();
   const navigate = useNavigate();
   const { collapsed: sidebarCollapsed } = useSidebar();
+  const permissions = usePermissionsDialog();
 
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -170,20 +176,41 @@ export default function Sidebar({
     d: DocMeta,
     p: Project,
     editable: boolean,
-    folderSlug: string | null,
+    folder: Folder | null,
   ) => {
     const active = activeDoc?.id === d.id;
     const Icon = d.is_quick_note ? QuickNoteIcon : DocIcon;
+    const folderSlug = folder?.slug ?? null;
+    // A "view only" / "comment only" lock (on the doc OR its folder) hides rename/delete here too (the
+    // DB enforces it regardless; this just doesn't dangle affordances that would fail).
+    const docEditable = editable && canEditDocument(p, d, folder, role, uid, myRole.get(p.id));
     const menu: MenuAction[] = [
       {
         label: "Rename",
         icon: <Pencil />,
         onSelect: () => void actions.editDocument(d),
       },
+      ...(canSetPermissions(p, uid)
+        ? [
+            {
+              label: "Permissions",
+              icon: <Lock />,
+              separatorBefore: true,
+              onSelect: () =>
+                permissions.open({
+                  kind: "document",
+                  id: d.id,
+                  name: docLabel(d),
+                  accessOverride: d.access_override,
+                }),
+            } satisfies MenuAction,
+          ]
+        : []),
       {
         label: "Delete",
         icon: <Trash2 />,
         danger: true,
+        separatorBefore: true,
         onSelect: () => void onDeleteDoc(p, d),
       },
     ];
@@ -211,7 +238,7 @@ export default function Sidebar({
           />
           <span className="min-w-0 flex-1 truncate">{docLabel(d)}</span>
         </Link>
-        {editable && !isMobile && <ActionsMenu actions={menu} />}
+        {docEditable && !isMobile && <ActionsMenu actions={menu} />}
       </div>
     );
   };
@@ -230,6 +257,8 @@ export default function Sidebar({
           const isCollapsed = collapsed.has(f.id);
           const folderDocs = documents.filter((d) => d.folder_id === f.id);
           const folderActive = activeFolder?.id === f.id;
+          // A locked folder hides its edit affordances for non-owners (DB enforces it regardless).
+          const folderEditable = editable && canEditFolder(p, f, role, uid, myRole.get(p.id));
           const menu: MenuAction[] = [
             {
               label: "New document",
@@ -241,10 +270,27 @@ export default function Sidebar({
               icon: <Pencil />,
               onSelect: () => void actions.editFolder(f),
             },
+            ...(canSetPermissions(p, uid)
+              ? [
+                  {
+                    label: "Permissions",
+                    icon: <Lock />,
+                    separatorBefore: true,
+                    onSelect: () =>
+                      permissions.open({
+                        kind: "folder",
+                        id: f.id,
+                        name: f.name,
+                        accessOverride: f.access_override,
+                      }),
+                  } satisfies MenuAction,
+                ]
+              : []),
             {
               label: "Delete",
               icon: <Trash2 />,
               danger: true,
+              separatorBefore: true,
               onSelect: () => void onDeleteFolder(p, f.id, f),
             },
           ];
@@ -289,11 +335,11 @@ export default function Sidebar({
                   />
                   <span className="min-w-0 flex-1 truncate">{f.name}</span>
                 </Link>
-                {editable && !isMobile && <ActionsMenu actions={menu} />}
+                {folderEditable && !isMobile && <ActionsMenu actions={menu} />}
               </div>
               {!isCollapsed && (
                 <div className="my-0.5 ml-4 border-l border-sidebar-border pl-1">
-                  {folderDocs.map((d) => docRow(d, p, editable, f.slug))}
+                  {folderDocs.map((d) => docRow(d, p, editable, f))}
                   {folderDocs.length === 0 && (
                     <div className="px-2 py-1 pl-7 text-xs text-muted-foreground italic">
                       empty

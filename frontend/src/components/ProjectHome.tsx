@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FilePlus, FolderPlus, Pencil, StickyNote, Trash2 } from 'lucide-react'
+import { FilePlus, FolderPlus, Lock, Pencil, StickyNote, Trash2 } from 'lucide-react'
 import ViewAllCard from './ViewAllCard'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
 import { useTreeActions } from '../hooks/useTreeActions'
 import { useRouteContext } from '../hooks/useRouteContext'
 import { useQuickNotes } from '../hooks/useQuickNotes'
-import { canEditProject } from '../lib/access'
+import { canEditDocument, canEditFolder, canEditProject, canSetPermissions } from '../lib/access'
+import { usePermissionsDialog } from '../context/PermissionsDialogContext'
 import { docPathFromTree, folderPath, notesPath, noteSplitPath } from '../lib/paths'
 import { docLabel } from '../lib/labels'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
@@ -59,6 +60,7 @@ export default function ProjectHome() {
   const { notes: workspaceNotes } = useQuickNotes()
   const actions = useTreeActions()
   const navigate = useNavigate()
+  const permissions = usePermissionsDialog()
 
   // Tab title: documents are handled by DocPage. A folder page reuses its project's title (folder
   // names aren't worth surfacing in the tab), so this resolves to the workspace ("My"), a regular
@@ -89,21 +91,53 @@ export default function ProjectHome() {
           if (note) navigate(noteSplitPath(project.slug, note.slug))
         }
 
-        const folderCardMenu = (f: Folder): MenuAction[] =>
-          canEdit
-            ? [
-                { label: 'New document', icon: <FilePlus />, onSelect: () => void onNewDoc(f.id) },
-                { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editFolder(f) },
-                { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => void actions.deleteFolder(f) },
-              ]
-            : []
-        const docCardMenu = (d: DocMeta): MenuAction[] =>
-          canEdit
-            ? [
-                { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editDocument(d) },
-                { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => void actions.deleteDocument(d) },
-              ]
-            : []
+        // Only the project owner may cap permissions; the cap then hides edit affordances for others.
+        const canPerms = canSetPermissions(project, uid)
+        const folderCardMenu = (f: Folder): MenuAction[] => {
+          const folderCanEdit = canEditFolder(project, f, role, uid, myMemberRole)
+          return [
+            ...(folderCanEdit
+              ? [
+                  { label: 'New document', icon: <FilePlus />, onSelect: () => void onNewDoc(f.id) },
+                  { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editFolder(f) },
+                ]
+              : []),
+            ...(canPerms
+              ? [
+                  {
+                    label: 'Permissions',
+                    icon: <Lock />,
+                    separatorBefore: true,
+                    onSelect: () =>
+                      permissions.open({ kind: 'folder', id: f.id, name: f.name, accessOverride: f.access_override }),
+                  } satisfies MenuAction,
+                ]
+              : []),
+            ...(folderCanEdit
+              ? [{ label: 'Delete', icon: <Trash2 />, danger: true, separatorBefore: true, onSelect: () => void actions.deleteFolder(f) } satisfies MenuAction]
+              : []),
+          ]
+        }
+        const docCardMenu = (d: DocMeta, folder: Folder | null): MenuAction[] => {
+          const docCanEdit = canEditDocument(project, d, folder, role, uid, myMemberRole)
+          return [
+            ...(docCanEdit ? [{ label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editDocument(d) } satisfies MenuAction] : []),
+            ...(canPerms
+              ? [
+                  {
+                    label: 'Permissions',
+                    icon: <Lock />,
+                    separatorBefore: true,
+                    onSelect: () =>
+                      permissions.open({ kind: 'document', id: d.id, name: docLabel(d), accessOverride: d.access_override }),
+                  } satisfies MenuAction,
+                ]
+              : []),
+            ...(docCanEdit
+              ? [{ label: 'Delete', icon: <Trash2 />, danger: true, separatorBefore: true, onSelect: () => void actions.deleteDocument(d) } satisfies MenuAction]
+              : []),
+          ]
+        }
 
         const folderCard = (f: Folder) => (
           <EntityCard
@@ -115,13 +149,13 @@ export default function ProjectHome() {
             menu={folderCardMenu(f)}
           />
         )
-        const docCard = (d: DocMeta) => (
+        const docCard = (d: DocMeta, folder: Folder | null = null) => (
           <EntityCard
             key={d.id}
             icon={<DocIcon />}
             title={docLabel(d)}
             to={docPathFromTree(project.slug, d, folders)}
-            menu={docCardMenu(d)}
+            menu={docCardMenu(d, folder)}
           />
         )
 
@@ -143,7 +177,7 @@ export default function ProjectHome() {
                   }
                 />
               ) : (
-                <div className={GRID}>{folderDocs.map(docCard)}</div>
+                <div className={GRID}>{folderDocs.map((d) => docCard(d, currentFolder))}</div>
               )}
             </PageLayout>
           )
@@ -181,12 +215,12 @@ export default function ProjectHome() {
               ) : (
                 <div className="flex flex-col gap-9">
                   {projectFolders.length > 0 && <Section title="Folders"><div className={GRID}>{projectFolders.map(folderCard)}</div></Section>}
-                  {files.length > 0 && <Section title="Files"><div className={GRID}>{files.map(docCard)}</div></Section>}
+                  {files.length > 0 && <Section title="Files"><div className={GRID}>{files.map((d) => docCard(d))}</div></Section>}
                   {workspaceNotes.length > 0 && (
                     <Section title="Quick notes">
                       <div className={GRID}>
                         {workspaceNotes.slice(0, WORKSPACE_NOTE_LIMIT).map((n) => (
-                          <QuickNoteCard key={n.id} note={n} workspaceSlug={project.slug} menu={docCardMenu(n)} />
+                          <QuickNoteCard key={n.id} note={n} workspaceSlug={project.slug} menu={docCardMenu(n, null)} />
                         ))}
                         <ViewAllCard to={notesPath(project.slug)} label="View all quick notes" />
                       </div>
@@ -223,7 +257,7 @@ export default function ProjectHome() {
             ) : (
               <div className="flex flex-col gap-9">
                 {projectFolders.length > 0 && <Section title="Folders"><div className={GRID}>{projectFolders.map(folderCard)}</div></Section>}
-                {rootDocs.length > 0 && <Section title="Documents"><div className={GRID}>{rootDocs.map(docCard)}</div></Section>}
+                {rootDocs.length > 0 && <Section title="Documents"><div className={GRID}>{rootDocs.map((d) => docCard(d))}</div></Section>}
               </div>
             )}
           </PageLayout>

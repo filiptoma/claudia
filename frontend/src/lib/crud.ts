@@ -155,6 +155,23 @@ export async function setProjectPublicRole(projectId: string, role: MemberRole):
   await update('projects', projectId, { public_role: role })
 }
 
+// Set (or clear, with null) a permission cap on a single document or folder. null = inherit; a folder
+// cap also restricts every document inside it. Owner-only — RLS + the protect_*_override triggers
+// enforce it server-side.
+export async function setDocumentAccessOverride(
+  documentId: string,
+  override: MemberRole | null,
+): Promise<void> {
+  await update('documents', documentId, { access_override: override })
+}
+
+export async function setFolderAccessOverride(
+  folderId: string,
+  override: MemberRole | null,
+): Promise<void> {
+  await update('folders', folderId, { access_override: override })
+}
+
 // Resolve a typed email to a mention target (members always; anyone on a public project). Returns
 // null if no matching, mentionable profile exists.
 export async function findMentionableByEmail(

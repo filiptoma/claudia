@@ -11,6 +11,20 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#eebd30" />
     <title>AstroNote</title>
+    <!-- Link-preview (Open Graph / Twitter) defaults. The Cloudflare Pages edge function
+         (functions/_middleware.js) rewrites the title tags per route for public documents, so a shared
+         document link previews with its own page title. These static values are the fallback for every
+         other page (and if the function is ever bypassed). -->
+    <meta property="og:site_name" content="AstroNote" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="AstroNote" />
+    <meta property="og:description" content="Collaborative markdown notes." />
+    <meta property="og:url" content="https://notes.byastro.dev/" />
+    <meta property="og:image" content="https://notes.byastro.dev/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="AstroNote" />
+    <meta name="twitter:description" content="Collaborative markdown notes." />
+    <meta name="twitter:image" content="https://notes.byastro.dev/icon-512.png" />
     <!-- Set theme before first paint to avoid a flash of the wrong theme. -->
     <script>
       (function () {

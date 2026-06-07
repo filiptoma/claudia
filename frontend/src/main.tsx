@@ -11,6 +11,7 @@ import { queryClient } from './lib/queryClient'
 import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider } from './context/AuthContext'
 import { DialogProvider } from './context/DialogContext'
+import { PermissionsDialogProvider } from './context/PermissionsDialogContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -19,7 +20,9 @@ createRoot(document.getElementById('root')!).render(
         <ThemeProvider>
           <AuthProvider>
             <DialogProvider>
-              <App />
+              <PermissionsDialogProvider>
+                <App />
+              </PermissionsDialogProvider>
             </DialogProvider>
           </AuthProvider>
         </ThemeProvider>
