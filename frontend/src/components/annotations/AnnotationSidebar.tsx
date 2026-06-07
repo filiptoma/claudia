@@ -342,10 +342,10 @@ export default function AnnotationSidebar() {
       <aside
         className={cn(
           "flex h-full shrink-0 flex-col overflow-hidden bg-background transition-[width] duration-200 ease-in-out",
-          sidebarOpen ? "w-74 xl:w-88 border-l border-border" : "w-0",
+          sidebarOpen ? "w-74 xl:w-88 2xl:w-96 border-l border-border" : "w-0",
         )}
       >
-        <div className="flex h-full w-74 xl:w-88 flex-col">
+        <div className="flex h-full w-74 xl:w-88 2xl:w-96 flex-col">
           {header}
           <SidebarBody />
         </div>
