@@ -2,7 +2,19 @@ import { customAlphabet } from 'nanoid'
 import { supabase } from './supabase'
 import { nextOrder } from './order'
 import { slugify } from './slug'
-import type { DocumentRec, Folder, MemberInfo, MemberRole, Project } from './types'
+import type {
+  Anchor,
+  CommentMessage,
+  CommentThread,
+  DocumentRec,
+  Folder,
+  MemberInfo,
+  MemberRole,
+  MentionableUser,
+  Project,
+  SuggestionMessage,
+  SuggestionThread,
+} from './types'
 
 type Table = 'projects' | 'folders' | 'documents'
 
@@ -138,6 +150,25 @@ export async function setProjectPublic(projectId: string, isPublic: boolean): Pr
   await update('projects', projectId, { is_public: isPublic })
 }
 
+// The baseline role everyone with access to a PUBLIC project gets (viewer | commenter | editor).
+export async function setProjectPublicRole(projectId: string, role: MemberRole): Promise<void> {
+  await update('projects', projectId, { public_role: role })
+}
+
+// Resolve a typed email to a mention target (members always; anyone on a public project). Returns
+// null if no matching, mentionable profile exists.
+export async function findMentionableByEmail(
+  projectId: string,
+  email: string,
+): Promise<MentionableUser | null> {
+  const { data, error } = await supabase.rpc('find_mentionable_by_email', {
+    p_project: projectId,
+    p_email: email,
+  })
+  if (error) throw new Error(error.message)
+  return ((data as MentionableUser[] | null) ?? [])[0] ?? null
+}
+
 // Resolve an email to a profile via a SECURITY DEFINER RPC (the profiles table itself is not
 // readable by non-admins), so an owner can invite by email like Google Docs.
 export async function findUserByEmail(email: string): Promise<{ id: string; name: string | null; email: string | null } | null> {
@@ -193,5 +224,180 @@ export async function submitFeedback(payload: {
     email: payload.email || null,
     user_id: payload.userId,
   })
+  if (error) throw new Error(error.message)
+}
+
+// ---- annotations: inline comments ----
+// Reads go through SECURITY DEFINER RPCs (the profiles table is private, so we can't join author
+// name/avatar client-side). Writes are single-row table ops gated by RLS, except thread creation
+// which is an atomic RPC (thread + first message).
+
+export async function listMentionableUsers(projectId: string): Promise<MentionableUser[]> {
+  const { data, error } = await supabase.rpc('list_mentionable_users', { p_project: projectId })
+  if (error) throw new Error(error.message)
+  return (data as MentionableUser[] | null) ?? []
+}
+
+export async function listDocumentCommentThreads(documentId: string): Promise<CommentThread[]> {
+  const { data, error } = await supabase.rpc('list_document_comment_threads', { p_document: documentId })
+  if (error) throw new Error(error.message)
+  return (data as CommentThread[] | null) ?? []
+}
+
+export async function listDocumentComments(documentId: string): Promise<CommentMessage[]> {
+  const { data, error } = await supabase.rpc('list_document_comments', { p_document: documentId })
+  if (error) throw new Error(error.message)
+  return (data as CommentMessage[] | null) ?? []
+}
+
+export async function createCommentThread(args: {
+  documentId: string
+  anchor: Anchor
+  sourceStart: number
+  sourceEnd: number
+  body: string
+  mentions: string[]
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_comment_thread', {
+    p_document: args.documentId,
+    p_anchor: args.anchor,
+    p_source_start: args.sourceStart,
+    p_source_end: args.sourceEnd,
+    p_body: args.body,
+    p_mentions: args.mentions,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+export async function addComment(
+  threadId: string,
+  author: string,
+  body: string,
+  mentions: string[],
+): Promise<void> {
+  const { error } = await supabase
+    .from('comments')
+    .insert({ thread_id: threadId, author, body, mentions })
+  if (error) throw new Error(error.message)
+}
+
+// Edit a message body (comment or reply). RLS allows the author only (c_update / sc_update).
+export async function editComment(commentId: string, body: string, mentions: string[]): Promise<void> {
+  const { error } = await supabase.from('comments').update({ body, mentions }).eq('id', commentId)
+  if (error) throw new Error(error.message)
+}
+
+export async function setThreadResolved(
+  threadId: string,
+  resolved: boolean,
+  resolvedBy: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('comment_threads')
+    .update({
+      resolved,
+      resolved_by: resolved ? resolvedBy : null,
+      resolved_at: resolved ? new Date().toISOString() : null,
+    })
+    .eq('id', threadId)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteCommentThread(threadId: string): Promise<void> {
+  const { error } = await supabase.from('comment_threads').delete().eq('id', threadId)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteComment(commentId: string): Promise<void> {
+  const { error } = await supabase.from('comments').delete().eq('id', commentId)
+  if (error) throw new Error(error.message)
+}
+
+// ---- annotations: suggested edits ----
+
+export async function listDocumentSuggestions(documentId: string): Promise<SuggestionThread[]> {
+  const { data, error } = await supabase.rpc('list_document_suggestions', { p_document: documentId })
+  if (error) throw new Error(error.message)
+  return (data as SuggestionThread[] | null) ?? []
+}
+
+export async function listDocumentSuggestionComments(documentId: string): Promise<SuggestionMessage[]> {
+  const { data, error } = await supabase.rpc('list_document_suggestion_comments', { p_document: documentId })
+  if (error) throw new Error(error.message)
+  return (data as SuggestionMessage[] | null) ?? []
+}
+
+export async function createSuggestion(args: {
+  documentId: string
+  anchor: Anchor
+  sourceStart: number
+  sourceEnd: number
+  originalMd: string
+  suggestedMd: string
+  note: string
+  mentions: string[]
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_suggestion', {
+    p_document: args.documentId,
+    p_anchor: args.anchor,
+    p_source_start: args.sourceStart,
+    p_source_end: args.sourceEnd,
+    p_original_md: args.originalMd,
+    p_suggested_md: args.suggestedMd,
+    p_note: args.note,
+    p_mentions: args.mentions,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+export async function addSuggestionComment(
+  suggestionId: string,
+  author: string,
+  body: string,
+  mentions: string[],
+): Promise<void> {
+  const { error } = await supabase
+    .from('suggestion_comments')
+    .insert({ suggestion_id: suggestionId, author, body, mentions })
+  if (error) throw new Error(error.message)
+}
+
+// Approve a suggestion: applies it to documents.content and marks it accepted (atomic, stale-safe).
+export async function approveSuggestion(suggestionId: string): Promise<void> {
+  const { error } = await supabase.rpc('apply_suggestion', { p_suggestion: suggestionId })
+  if (error) throw new Error(error.message)
+}
+
+// Reject a suggestion (editor/owner): marks it rejected — the row is kept until deleted as cleanup.
+export async function rejectSuggestion(suggestionId: string): Promise<void> {
+  const { error } = await supabase.rpc('reject_suggestion', { p_suggestion: suggestionId })
+  if (error) throw new Error(error.message)
+}
+
+// Withdraw a still-pending suggestion (its author): removes the row entirely; replies cascade.
+export async function withdrawSuggestion(suggestionId: string): Promise<void> {
+  const { error } = await supabase.from('suggestion_threads').delete().eq('id', suggestionId)
+  if (error) throw new Error(error.message)
+}
+
+// Permanently delete a resolved (accepted/rejected) suggestion — editor/owner cleanup.
+export async function deleteSuggestion(suggestionId: string): Promise<void> {
+  const { error } = await supabase.from('suggestion_threads').delete().eq('id', suggestionId)
+  if (error) throw new Error(error.message)
+}
+
+// Edit a still-pending suggestion's replacement text (its author only; RLS st_update).
+export async function editSuggestion(suggestionId: string, suggestedMd: string): Promise<void> {
+  const { error } = await supabase
+    .from('suggestion_threads')
+    .update({ suggested_md: suggestedMd })
+    .eq('id', suggestionId)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteSuggestionComment(commentId: string): Promise<void> {
+  const { error } = await supabase.from('suggestion_comments').delete().eq('id', commentId)
   if (error) throw new Error(error.message)
 }

@@ -1,7 +1,11 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp, PencilLine, X } from 'lucide-react'
 import { useIsMobile } from '../hooks/useIsMobile'
 import type { ChangeEvent, RefObject } from 'react'
+import { AnnotationContext } from '../context/AnnotationContext'
+import { useAnnotationEngine } from '../hooks/useAnnotationEngine'
+import AnnotationToolbar from './annotations/AnnotationToolbar'
+import SuggestionComposer from './annotations/SuggestionComposer'
 import CodeMirror from '@uiw/react-codemirror'
 import type { BasicSetupOptions, ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -28,7 +32,39 @@ import SlashMenu from './SlashMenu'
 import type { SlashCommand, SlashState } from './SlashMenu'
 import RefPicker from './RefPicker'
 import type { RefAnchor } from './RefPicker'
-import type { DocumentRec } from '../lib/types'
+import type { Anchor, DocumentRec } from '../lib/types'
+
+interface PendingEdit {
+  sourceStart: number
+  sourceEnd: number
+  originalMd: string
+  suggestedMd: string
+  anchor: Anchor
+}
+
+// Finds the minimal changed region between two strings and builds the suggestion anchor.
+function computeEditCapture(original: string, suggested: string): PendingEdit | null {
+  if (original === suggested) return null
+  let start = 0
+  while (start < original.length && start < suggested.length && original[start] === suggested[start]) start++
+  let endOrig = original.length
+  let endSugg = suggested.length
+  while (endOrig > start && endSugg > start && original[endOrig - 1] === suggested[endSugg - 1]) {
+    endOrig--
+    endSugg--
+  }
+  return {
+    sourceStart: start,
+    sourceEnd: endOrig,
+    originalMd: original.slice(start, endOrig),
+    suggestedMd: suggested.slice(start, endSugg),
+    anchor: {
+      quote: original.slice(start, endOrig),
+      prefix: original.slice(Math.max(0, start - 32), start),
+      suffix: original.slice(endOrig, Math.min(original.length, endOrig + 32)),
+    },
+  }
+}
 
 const BASIC_SETUP: BasicSetupOptions = {
   lineNumbers: false,
@@ -37,6 +73,10 @@ const BASIC_SETUP: BasicSetupOptions = {
   // We build our own slash reference menu; CodeMirror's autocomplete is not used.
   autocompletion: false,
 }
+
+// Desktop floating window top in split mode: clears the app header (52px) + the editor's formatting
+// toolbar (~48px) + the preview pane's annotation toolbar (44px).
+const SPLIT_FLOATING_TOP = 148
 
 // Editor chrome (font, padding, fill height) handled here rather than in CSS. Font size + line height
 // are matched to the rendered markdown (.md) so source and preview lines sit at the same y in split.
@@ -127,10 +167,23 @@ export default function Editor({
   doc,
   showPreview,
   onContentChange,
+  suggestionMode = false,
+  onCreateSuggestion,
 }: {
   doc: DocumentRec
   showPreview: boolean
   onContentChange?: (content: string) => void
+  /** True for commenters who cannot directly edit: keystrokes open a suggestion confirmation panel. */
+  suggestionMode?: boolean
+  onCreateSuggestion?: (args: {
+    anchor: Anchor
+    sourceStart: number
+    sourceEnd: number
+    originalMd: string
+    suggestedMd: string
+    note: string
+    mentions: string[]
+  }) => Promise<void>
 }) {
   const { theme } = useTheme()
   const isMobile = useIsMobile()
@@ -146,6 +199,9 @@ export default function Editor({
   const [initialValue] = useState(doc.content)
   const latest = useRef(doc.content)
   const dirty = useRef(false)
+  // Tracks the last externally-applied content so we only reset CodeMirror on real outside changes
+  // (e.g. a suggestion was approved), never on our own autosaves.
+  const externalContent = useRef(doc.content)
   const uploadCounter = useRef(0)
   const [preview, setPreview] = useState(doc.content)
   const deferredPreview = useDeferredValue(preview)
@@ -166,6 +222,16 @@ export default function Editor({
   const [active, setActive] = useState(0)
   const [refPicker, setRefPicker] = useState<{ anchor: RefAnchor; from: number } | null>(null)
   const prevQueryRef = useRef<string | null>(null)
+
+  // Suggestion mode state
+  const [pendingEdit, setPendingEdit] = useState<PendingEdit | null>(null)
+  const [suggestionBusy, setSuggestionBusy] = useState(false)
+  // Mobile suggestion sheet: measured height + the bottom scroll margin CodeMirror should reserve so
+  // the edited line stays clear of the fixed sheet (read via ref at scroll time — see `extensions`).
+  const suggestionSheetRef = useRef<HTMLDivElement>(null)
+  const [suggestionSheetH, setSuggestionSheetH] = useState(0)
+  const suggestionMarginRef = useRef(0)
+  const sheetOpenRef = useRef(false)
 
   // Mirrored into refs so the (stable) CodeMirror extension closures read the latest values at event
   // time without rebuilding the editor. `sessionRef` tracks an active slash session — started by a
@@ -218,22 +284,102 @@ export default function Editor({
   const handleChange = useCallback(
     (val: string) => {
       latest.current = val
-      dirty.current = true
       window.clearTimeout(previewTimer.current)
       previewTimer.current = window.setTimeout(() => {
         setPreview(val)
         onContentChange?.(val)
       }, 150)
+      if (suggestionMode) {
+        // Don't save; track the edit diff for the suggestion panel instead.
+        setPendingEdit(computeEditCapture(doc.content, val))
+        return
+      }
+      dirty.current = true
       window.clearTimeout(saveTimer.current)
       saveTimer.current = window.setTimeout(() => void doSave(), 800)
     },
-    [doSave, onContentChange],
+    [doSave, onContentChange, suggestionMode, doc.content],
   )
+
+  // Revert editor to saved content and clear the pending suggestion.
+  const revertEditor = useCallback(() => {
+    const view = cmRef.current?.view
+    if (!view) return
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: doc.content } })
+  }, [doc.content])
+
+  const handleSubmitSuggestion = useCallback(
+    async (suggestedMd: string, note: string, mentions: string[]) => {
+      if (!pendingEdit || !onCreateSuggestion || suggestionBusy) return
+      setSuggestionBusy(true)
+      try {
+        await onCreateSuggestion({
+          anchor: pendingEdit.anchor,
+          sourceStart: pendingEdit.sourceStart,
+          sourceEnd: pendingEdit.sourceEnd,
+          originalMd: pendingEdit.originalMd,
+          suggestedMd,
+          note,
+          mentions,
+        })
+        toast('success', 'Suggestion submitted')
+        revertEditor()
+      } catch (e) {
+        toast('error', e instanceof Error ? e.message : 'Failed to submit suggestion')
+      } finally {
+        setSuggestionBusy(false)
+      }
+    },
+    [pendingEdit, onCreateSuggestion, suggestionBusy, revertEditor],
+  )
+
+  // ---- mobile suggestion sheet: keep the edited line visible above it ----
+  const sheetOpen = isMobile && suggestionMode && !!pendingEdit
+  // Measure the sheet (its diff grows as the edit grows) so CodeMirror reserves matching bottom margin.
+  useLayoutEffect(() => {
+    const el = suggestionSheetRef.current
+    if (!sheetOpen || !el) {
+      setSuggestionSheetH(0)
+      return
+    }
+    setSuggestionSheetH(el.offsetHeight)
+    const ro = new ResizeObserver(() => setSuggestionSheetH(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [sheetOpen])
+  // Mirror the reserved margin into the ref the scrollMargins extension reads at scroll time.
+  useEffect(() => {
+    suggestionMarginRef.current = sheetOpen ? suggestionSheetH + 12 : 0
+  }, [sheetOpen, suggestionSheetH])
+  // When the sheet first opens, lift the just-typed edit above it once (CodeMirror won't re-scroll on
+  // its own after the async render that mounts the sheet).
+  useEffect(() => {
+    if (!sheetOpen) {
+      sheetOpenRef.current = false
+      return
+    }
+    if (sheetOpenRef.current || suggestionSheetH <= 0) return
+    sheetOpenRef.current = true
+    const view = cmRef.current?.view
+    if (view) view.dispatch({ effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: 'nearest' }) })
+  }, [sheetOpen, suggestionSheetH])
+
+  // When the saved content changes from OUTSIDE this editor (a suggestion was approved → applied), pull
+  // it into CodeMirror so the change shows immediately without a refresh. Skip if we have unsaved edits
+  // or a pending suggestion (don't clobber in-progress work) or if it's just our own autosave echo.
+  useEffect(() => {
+    const view = cmRef.current?.view
+    if (!view || doc.content === externalContent.current) return
+    externalContent.current = doc.content
+    if (dirty.current || pendingEdit || view.state.doc.toString() === doc.content) return
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: doc.content } })
+    setPreview(doc.content)
+  }, [doc.content, pendingEdit])
 
   // Flush on tab close (keepalive PATCH straight to PostgREST) and on unmount.
   useEffect(() => {
     const onBeforeUnload = () => {
-      if (!dirty.current) return
+      if (suggestionMode || !dirty.current) return
       fetch(`${SUPABASE_URL}/rest/v1/documents?id=eq.${doc.id}`, {
         method: 'PATCH',
         keepalive: true,
@@ -391,6 +537,10 @@ export default function Editor({
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       EditorView.lineWrapping,
       cmChrome,
+      // Reserve bottom space equal to the mobile suggestion sheet so the cursor stays above it while
+      // typing. Read via ref at scroll time, so the extension never rebuilds — false positive.
+      // eslint-disable-next-line react-hooks/refs
+      EditorView.scrollMargins.of(() => (suggestionMarginRef.current ? { bottom: suggestionMarginRef.current } : null)),
       EditorView.updateListener.of((u) => {
         if (u.selectionSet || u.docChanged || u.focusChanged) {
           // Image and table contexts are mutually exclusive; the image toolbar takes precedence.
@@ -546,12 +696,16 @@ export default function Editor({
   const handleCreateEditor = useCallback((view: EditorView) => setScroller(view.scrollDOM), [])
 
   // Split mode: anchor the source and preview panes so they scroll together (proportional mapping).
+  // Touch fix: on touch devices, momentum scroll events keep firing for ~1 s after the finger lifts.
+  // Without a prolonged lock the destination panel's momentum events would re-activate as the source
+  // and fight the original gesture. We lock the touched panel for an extra window after touchend.
   useEffect(() => {
     const left = scroller
     const right = previewRef.current
     if (!showPreview || !left || !right) return
     let active: HTMLElement | null = null
     let raf = 0
+    let touchTimer = 0
     const sync = (src: HTMLElement, dst: HTMLElement) => {
       const sMax = src.scrollHeight - src.clientHeight
       const dMax = dst.scrollHeight - dst.clientHeight
@@ -560,9 +714,12 @@ export default function Editor({
     }
     const release = () => {
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        active = null
-      })
+      raf = requestAnimationFrame(() => { active = null })
+    }
+    // After touchend hold the lock for a full second to absorb the momentum scroll phase.
+    const releaseTouchDelay = () => {
+      clearTimeout(touchTimer)
+      touchTimer = window.setTimeout(() => { active = null }, 1000)
     }
     const onLeft = () => {
       if (active === right) return
@@ -576,12 +733,24 @@ export default function Editor({
       sync(right, left)
       release()
     }
+    // Lock whichever panel the finger lands on so only that panel drives the sync during the gesture.
+    const onLeftTouch = () => { clearTimeout(touchTimer); active = left }
+    const onRightTouch = () => { clearTimeout(touchTimer); active = right }
     left.addEventListener('scroll', onLeft, { passive: true })
     right.addEventListener('scroll', onRight, { passive: true })
+    left.addEventListener('touchstart', onLeftTouch, { passive: true })
+    right.addEventListener('touchstart', onRightTouch, { passive: true })
+    left.addEventListener('touchend', releaseTouchDelay, { passive: true })
+    right.addEventListener('touchend', releaseTouchDelay, { passive: true })
     return () => {
       left.removeEventListener('scroll', onLeft)
       right.removeEventListener('scroll', onRight)
+      left.removeEventListener('touchstart', onLeftTouch)
+      right.removeEventListener('touchstart', onRightTouch)
+      left.removeEventListener('touchend', releaseTouchDelay)
+      right.removeEventListener('touchend', releaseTouchDelay)
       cancelAnimationFrame(raf)
+      clearTimeout(touchTimer)
     }
   }, [showPreview, scroller])
 
@@ -594,22 +763,48 @@ export default function Editor({
   return (
     // Fill the scroll area's full height (the parent has a definite height); the editor and preview
     // panes manage their own internal scrolling, so the page itself doesn't scroll in edit/split.
-    // The toolbar spans the full width above BOTH panes so the source and rendered content line up at
-    // the same y (it used to sit inside the left pane only, shifting the preview up relative to it).
+    // Each pane carries its own toolbar: the formatting toolbar sits above the source editor (left),
+    // the comments/suggestions toolbar above the rendered preview (right). Both share the same min
+    // height so source and rendered content line up at the same y — but the formatting toolbar is free
+    // to grow taller (rather than clip) when its buttons wrap, e.g. the table controls.
     <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-border bg-card/40">
-        {isMobile ? (
-          <>
-            <button
-              className="flex h-12 w-full items-center justify-between px-4 text-sm font-medium text-muted-foreground active:bg-card/80"
-              onClick={() => setToolbarOpen((o) => !o)}
-              aria-label={toolbarOpen ? 'Hide formatting toolbar' : 'Show formatting toolbar'}
-            >
-              <span>Format</span>
-              {toolbarOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {toolbarOpen && (
-              <div className="overflow-x-auto border-t border-border px-2 pb-2 pt-1">
+      <div className={cn('flex min-h-0 flex-1', showPreview ? 'max-md:flex-col' : '')}>
+        <div
+          className={cn(
+            'flex min-w-0 flex-col',
+            showPreview ? 'flex-1 basis-1/2 border-r border-border max-md:border-r-0 max-md:border-b' : 'flex-1',
+          )}
+          onBlur={() => { if (!suggestionMode) void doSave() }}
+        >
+          <div className="shrink-0 border-b border-border bg-card/40">
+            {isMobile ? (
+              <>
+                <button
+                  className="flex h-12 w-full items-center justify-between px-4 text-sm font-medium text-muted-foreground active:bg-card/80"
+                  onClick={() => setToolbarOpen((o) => !o)}
+                  aria-label={toolbarOpen ? 'Hide formatting toolbar' : 'Show formatting toolbar'}
+                >
+                  <span>Format</span>
+                  {toolbarOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+                {toolbarOpen && (
+                  <div className="overflow-x-auto border-t border-border px-2 pb-2 pt-1">
+                    <EditorToolbar
+                      getView={() => cmRef.current?.view ?? null}
+                      onImageClick={() => fileInputRef.current?.click()}
+                      onRefClick={handleRefClick}
+                      inTable={inTable}
+                      inImage={inImage}
+                      imageWidth={imageWidth}
+                      onImageWider={() => stepImageWidth(1)}
+                      onImageNarrower={() => stepImageWidth(-1)}
+                      onImageResetSize={resetImageWidth}
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex min-h-11 items-center px-2.5 py-1">
                 <EditorToolbar
                   getView={() => cmRef.current?.view ?? null}
                   onImageClick={() => fileInputRef.current?.click()}
@@ -623,31 +818,7 @@ export default function Editor({
                 />
               </div>
             )}
-          </>
-        ) : (
-          <div className="flex items-center px-2.5 py-1.5">
-            <EditorToolbar
-              getView={() => cmRef.current?.view ?? null}
-              onImageClick={() => fileInputRef.current?.click()}
-              onRefClick={handleRefClick}
-              inTable={inTable}
-              inImage={inImage}
-              imageWidth={imageWidth}
-              onImageWider={() => stepImageWidth(1)}
-              onImageNarrower={() => stepImageWidth(-1)}
-              onImageResetSize={resetImageWidth}
-            />
           </div>
-        )}
-      </div>
-      <div className={cn('flex min-h-0 flex-1', showPreview ? 'max-md:flex-col' : '')}>
-        <div
-          className={cn(
-            'flex min-w-0 flex-col',
-            showPreview ? 'flex-1 basis-1/2 border-r border-border max-md:border-r-0 max-md:border-b' : 'flex-1',
-          )}
-          onBlur={() => void doSave()}
-        >
           <SourceEditor
             cmRef={cmRef}
             value={initialValue}
@@ -659,16 +830,16 @@ export default function Editor({
           <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={onFilePicked} />
         </div>
         {showPreview && (
-          <div ref={previewRef} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto px-7 pt-4 pb-20">
-            <Markdown
-              images={previewImages}
-              onToggleTask={toggleTask}
-              onResizeImage={handleResizeImage}
-              scrollRoot={() => previewRef.current}
-            >
-              {deferredPreview}
-            </Markdown>
-          </div>
+          <EditorPreview
+            scrollRef={previewRef}
+            docId={doc.id}
+            projectId={doc.project_id}
+            canEdit={!suggestionMode}
+            content={deferredPreview}
+            images={previewImages}
+            onToggleTask={toggleTask}
+            onResizeImage={handleResizeImage}
+          />
         )}
       </div>
       {dropHint && (
@@ -696,6 +867,154 @@ export default function Editor({
           onClose={handleRefClose}
         />
       )}
+
+      {/* Suggestion confirmation panel — shown when a commenter has made changes */}
+      {suggestionMode && pendingEdit && (
+        isMobile ? (
+          /* Mobile: short fixed bottom sheet */
+          <div
+            ref={suggestionSheetRef}
+            className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl border-t border-border bg-background shadow-2xl"
+          >
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+            </div>
+            <div className="flex items-center justify-between border-b border-border px-4 py-2">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <PencilLine className="size-4 text-muted-foreground" />
+                Suggest an edit
+              </div>
+              <button
+                type="button"
+                aria-label="Cancel suggestion"
+                onClick={revertEditor}
+                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <SuggestionPanelBody
+              projectId={doc.project_id}
+              pendingEdit={pendingEdit}
+              busy={suggestionBusy}
+              onSubmit={handleSubmitSuggestion}
+              onCancel={revertEditor}
+            />
+          </div>
+        ) : (
+          /* Desktop: floating panel pinned to the top-right, matching the annotation floating window */
+          <div
+            className="fixed right-4 z-50 flex w-80 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+            style={{ top: SPLIT_FLOATING_TOP, maxHeight: `calc(100vh - ${SPLIT_FLOATING_TOP}px - 1rem)` }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <PencilLine className="size-4 text-muted-foreground" />
+                Suggest an edit
+              </div>
+              <button
+                type="button"
+                aria-label="Cancel suggestion"
+                onClick={revertEditor}
+                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <SuggestionPanelBody
+              projectId={doc.project_id}
+              pendingEdit={pendingEdit}
+              busy={suggestionBusy}
+              onSubmit={handleSubmitSuggestion}
+              onCancel={revertEditor}
+            />
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
+// The split editor's right preview pane, wrapped with the annotations engine so a reviewer can
+// highlight rendered text to comment/suggest, see existing highlights, and open the sidebar from the
+// toolbar — the same UX as read mode. Desktop only (split mode is unavailable on mobile).
+function EditorPreview({
+  scrollRef,
+  docId,
+  projectId,
+  canEdit,
+  content,
+  images,
+  onToggleTask,
+  onResizeImage,
+}: {
+  scrollRef: RefObject<HTMLDivElement | null>
+  docId: string
+  projectId: string
+  canEdit: boolean
+  content: string
+  images: Record<string, string>
+  onToggleTask: (index: number) => void
+  onResizeImage: (index: number, width: number) => void
+}) {
+  const docRef = useRef<HTMLDivElement>(null)
+  const eng = useAnnotationEngine({
+    docRef,
+    docId,
+    projectId,
+    content,
+    canEdit,
+    canComment: true,
+    floatingTop: SPLIT_FLOATING_TOP,
+  })
+
+  return (
+    <AnnotationContext.Provider value={eng.ctx}>
+      <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto">
+        <AnnotationToolbar count={eng.pendingCount} onOpenSidebar={() => eng.ctx.setSidebarOpen(true)} />
+        <div ref={docRef} onClick={eng.onDocClick} className="px-7 pt-4 pb-20">
+          <Markdown
+            images={images}
+            annotate
+            suggestions={eng.suggestionDiffs}
+            onToggleTask={onToggleTask}
+            onResizeImage={onResizeImage}
+            scrollRoot={() => scrollRef.current}
+          >
+            {content}
+          </Markdown>
+        </div>
+      </div>
+      {eng.overlays}
+    </AnnotationContext.Provider>
+  )
+}
+
+function SuggestionPanelBody({
+  projectId,
+  pendingEdit,
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  projectId: string
+  pendingEdit: PendingEdit
+  busy: boolean
+  onSubmit: (suggestedMd: string, note: string, mentions: string[]) => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="overflow-y-auto p-3 max-h-[50vh]">
+      <SuggestionComposer
+        projectId={projectId}
+        originalMd={pendingEdit.originalMd}
+        suggestedMd={pendingEdit.suggestedMd}
+        busy={busy}
+        submitLabel="Suggest"
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+      />
     </div>
   )
 }

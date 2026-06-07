@@ -252,7 +252,7 @@ const ToolSep = () => <Separator orientation="vertical" className="mx-1 h-5!" />
 // A labelled cluster of table buttons (Row / Column / Alignment) for the second toolbar row.
 function ToolGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex shrink-0 items-center gap-1">
       <span className="px-1 text-[0.62rem] leading-none font-semibold tracking-wide text-muted-foreground/70 uppercase">
         {label}
       </span>
@@ -346,24 +346,36 @@ export default function EditorToolbar({
     )
   }
 
+  // Each cluster stays on a single line (shrink-0, no internal wrap); the outer row wraps *between*
+  // clusters, so a row break lands on a divider — core formatting on one row, support actions on the
+  // next — rather than splitting a group mid-way.
   return (
-    <div className="flex flex-wrap items-center gap-0.5">
-      <ButtonRow buttons={BASE_BUTTONS} run={run} />
+    <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1">
+      {/* Core formatting actions */}
+      <div className="flex shrink-0 items-center gap-0.5">
+        <ButtonRow buttons={BASE_BUTTONS} run={run} />
+      </div>
+
       <ToolSep />
-      {/* Insert table — shown unless the cursor is already inside a table (then the table controls show). */}
-      {!inTable && (
-        <ToolButton title="Insert table" onClick={run(insertBlock(TABLE_TEMPLATE))}>
-          <Table />
+
+      {/* Support / insert actions — wrap to the next row as a unit when space is tight. */}
+      <div className="flex shrink-0 items-center gap-0.5">
+        {/* Insert table — shown unless the cursor is already inside a table (then table controls show). */}
+        {!inTable && (
+          <ToolButton title="Insert table" onClick={run(insertBlock(TABLE_TEMPLATE))}>
+            <Table />
+          </ToolButton>
+        )}
+        <ButtonRow buttons={INSERT_BUTTONS} run={run} />
+        <ToolButton title="Insert image" onClick={onImageClick}>
+          <ImageIcon />
         </ToolButton>
-      )}
-      <ButtonRow buttons={INSERT_BUTTONS} run={run} />
-      <ToolButton title="Insert image" onClick={onImageClick}>
-        <ImageIcon />
-      </ToolButton>
-      <ToolButton title="Insert reference (type / in the editor)" onClick={onRefClick}>
-        <AtSign />
-      </ToolButton>
-      {/* Table controls (Row / Column / Alignment) — inline, only while the cursor is in a table. */}
+        <ToolButton title="Insert reference (type / in the editor)" onClick={onRefClick}>
+          <AtSign />
+        </ToolButton>
+      </div>
+
+      {/* Table controls (Row / Column / Alignment) — each its own cluster, only while in a table. */}
       {inTable && (
         <>
           <ToolSep />

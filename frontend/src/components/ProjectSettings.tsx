@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { Globe, Lock, Trash2, UserPlus } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { AlertTriangle, Globe, Lock, Trash2, UserPlus } from "lucide-react";
 import {
   addMember,
   findUserByEmail,
@@ -11,33 +11,40 @@ import {
   listProjectMembers,
   removeMember,
   setProjectPublic,
-} from '../lib/crud'
-import { useAuth } from '../context/AuthContext'
-import { useTree } from '../hooks/useTree'
-import { useRouteContext } from '../hooks/useRouteContext'
-import { useDocumentTitle } from '../hooks/useDocumentTitle'
-import { canConfigureProject } from '../lib/access'
-import { toast } from '../lib/toast'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+  setProjectPublicRole,
+} from "../lib/crud";
+import { useAuth } from "../context/AuthContext";
+import { useTree } from "../hooks/useTree";
+import { useRouteContext } from "../hooks/useRouteContext";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { canConfigureProject } from "../lib/access";
+import { toast } from "../lib/toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import QuerySuspense from './QuerySuspense'
-import ProfileAvatar from './ProfileAvatar'
-import PageLayout from './PageLayout'
-import PageHeader from './PageHeader'
-import { cn } from '@/lib/utils'
-import type { MemberInfo, MemberRole } from '../lib/types'
+} from "@/components/ui/select";
+import QuerySuspense from "./QuerySuspense";
+import ProfileAvatar from "./ProfileAvatar";
+import PageLayout from "./PageLayout";
+import PageHeader from "./PageHeader";
+import { cn } from "@/lib/utils";
+import type { MemberInfo, MemberRole } from "../lib/types";
 
-const inviteSchema = z.object({ email: z.email('Enter a valid email address') })
-type InviteValues = z.infer<typeof inviteSchema>
+const inviteSchema = z.object({
+  email: z.email("Enter a valid email address"),
+});
+type InviteValues = z.infer<typeof inviteSchema>;
 
 function RoleSelect({
   value,
@@ -45,22 +52,27 @@ function RoleSelect({
   onChange,
   hideViewer,
 }: {
-  value: MemberRole
-  disabled?: boolean
-  onChange: (r: MemberRole) => void
-  hideViewer?: boolean
+  value: MemberRole;
+  disabled?: boolean;
+  onChange: (r: MemberRole) => void;
+  hideViewer?: boolean;
 }) {
   return (
-    <Select value={value} disabled={disabled} onValueChange={(v) => onChange(v as MemberRole)}>
-      <SelectTrigger className="w-32">
+    <Select
+      value={value}
+      disabled={disabled}
+      onValueChange={(v) => onChange(v as MemberRole)}
+    >
+      <SelectTrigger className="w-40">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {!hideViewer && <SelectItem value="viewer">can view</SelectItem>}
+        <SelectItem value="commenter">can comment</SelectItem>
         <SelectItem value="editor">can edit</SelectItem>
       </SelectContent>
     </Select>
-  )
+  );
 }
 
 function Notice({ title, body }: { title: string; body: string }) {
@@ -72,109 +84,161 @@ function Notice({ title, body }: { title: string; body: string }) {
         <Link to="/">Go home</Link>
       </Button>
     </div>
-  )
+  );
 }
 
 export default function ProjectSettings() {
-  const { project, projectSlug } = useRouteContext()
-  const { role, uid } = useAuth()
-  const { refresh, queries } = useTree()
+  const { project, projectSlug } = useRouteContext();
+  const { role, uid } = useAuth();
+  const { refresh, queries } = useTree();
 
-  useDocumentTitle(project ? `${project.name} · Settings` : undefined)
+  useDocumentTitle(project ? `${project.name} · Settings` : undefined);
 
-  const [isPublic, setIsPublic] = useState(project?.is_public ?? false)
-  const [members, setMembers] = useState<MemberInfo[] | null>(null)
-  const [owner, setOwner] = useState<{ id: string; name: string | null; email: string | null; avatar_url: string | null } | null>(null)
-  const [inviteRole, setInviteRole] = useState<MemberRole>('viewer')
-  const [busy, setBusy] = useState(false)
+  const [isPublic, setIsPublic] = useState(project?.is_public ?? false);
+  const [publicRole, setPublicRole] = useState<MemberRole>(
+    project?.public_role ?? "viewer",
+  );
+  const [members, setMembers] = useState<MemberInfo[] | null>(null);
+  const [owner, setOwner] = useState<{
+    id: string;
+    name: string | null;
+    email: string | null;
+    avatar_url: string | null;
+  } | null>(null);
+  const [inviteRole, setInviteRole] = useState<MemberRole>("viewer");
+  const [busy, setBusy] = useState(false);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<InviteValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<InviteValues>({
     resolver: zodResolver(inviteSchema),
-    defaultValues: { email: '' },
-  })
+    defaultValues: { email: "" },
+  });
 
   // Sync the visibility toggle to the resolved project without an effect (adjust-during-render).
-  const projectId = project?.id
-  const [trackedId, setTrackedId] = useState(projectId)
+  const projectId = project?.id;
+  const [trackedId, setTrackedId] = useState(projectId);
   if (trackedId !== projectId) {
-    setTrackedId(projectId)
-    setIsPublic(project?.is_public ?? false)
+    setTrackedId(projectId);
+    setIsPublic(project?.is_public ?? false);
+    setPublicRole(project?.public_role ?? "viewer");
   }
   useEffect(() => {
-    if (projectId) listProjectMembers(projectId).then(setMembers).catch(() => setMembers([]))
-  }, [projectId])
+    if (projectId)
+      listProjectMembers(projectId)
+        .then(setMembers)
+        .catch(() => setMembers([]));
+  }, [projectId]);
 
   useEffect(() => {
     if (projectId && project?.owner) {
-      getProjectOwner(projectId).then(setOwner).catch(() => setOwner(null))
+      getProjectOwner(projectId)
+        .then(setOwner)
+        .catch(() => setOwner(null));
     }
-  }, [projectId, project?.owner])
+  }, [projectId, project?.owner]);
 
   const guard = async (fn: () => Promise<void>) => {
-    setBusy(true)
+    setBusy(true);
     try {
-      await fn()
-      void refresh()
+      await fn();
+      void refresh();
     } catch (e) {
-      toast('error', e instanceof Error ? e.message : 'Something went wrong')
+      toast("error", e instanceof Error ? e.message : "Something went wrong");
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
   const reload = () => {
-    if (projectId) return listProjectMembers(projectId).then(setMembers).catch(() => setMembers([]))
-  }
+    if (projectId)
+      return listProjectMembers(projectId)
+        .then(setMembers)
+        .catch(() => setMembers([]));
+  };
 
   const togglePublic = () =>
     guard(async () => {
-      if (!project) return
-      const next = !isPublic
-      await setProjectPublic(project.id, next)
-      setIsPublic(next)
-      // Public projects have no concept of "view-only" members (anyone can already view).
-      if (next && inviteRole === 'viewer') setInviteRole('editor')
-      toast('success', next ? 'Project is now public' : 'Project is now private')
-    })
+      if (!project) return;
+      const next = !isPublic;
+      await setProjectPublic(project.id, next);
+      setIsPublic(next);
+      // Public projects are already readable by anyone; the minimum meaningful explicit role is commenter.
+      if (next && inviteRole === "viewer") setInviteRole("commenter");
+      toast(
+        "success",
+        next ? "Project is now public" : "Project is now private",
+      );
+    });
 
   const onInvite = handleSubmit((values) =>
     guard(async () => {
-      if (!project) return
-      const u = await findUserByEmail(values.email.trim())
+      if (!project) return;
+      const u = await findUserByEmail(values.email.trim());
       if (!u) {
-        toast('error', 'No user found with that email. They need to sign up first.')
-        return
+        toast(
+          "error",
+          "No user found with that email. They need to sign up first.",
+        );
+        return;
       }
-      await addMember(project.id, u.id, inviteRole)
-      reset({ email: '' })
-      await reload()
-      toast('success', `Invited ${u.name || u.email}`)
+      await addMember(project.id, u.id, inviteRole);
+      reset({ email: "" });
+      await reload();
+      toast("success", `Invited ${u.name || u.email}`);
     }),
-  )
+  );
 
   const changeRole = (userId: string, r: MemberRole) =>
     guard(async () => {
-      if (!project) return
-      await addMember(project.id, userId, r)
-      await reload()
-      toast('success', 'Access updated')
-    })
+      if (!project) return;
+      await addMember(project.id, userId, r);
+      await reload();
+      toast("success", "Access updated");
+    });
+
+  const changePublicRole = (r: MemberRole) =>
+    guard(async () => {
+      if (!project) return;
+      await setProjectPublicRole(project.id, r);
+      setPublicRole(r);
+      toast("success", "Default permission updated");
+    });
 
   const remove = (userId: string) =>
     guard(async () => {
-      if (!project) return
-      await removeMember(project.id, userId)
-      await reload()
-      toast('success', 'Access removed')
-    })
+      if (!project) return;
+      await removeMember(project.id, userId);
+      await reload();
+      toast("success", "Access removed");
+    });
 
   return (
     <QuerySuspense queries={queries} loadingLabel="Loading settings…">
       {(() => {
-        if (!project) return <Notice title="Not found" body={`Project "${projectSlug}" doesn’t exist or you can’t access it.`} />
+        if (!project)
+          return (
+            <Notice
+              title="Not found"
+              body={`Project "${projectSlug}" doesn’t exist or you can’t access it.`}
+            />
+          );
         if (project.is_workspace)
-          return <Notice title="No settings" body="Your workspace is private to you and can’t be shared or configured." />
+          return (
+            <Notice
+              title="No settings"
+              body="Your workspace is private to you and can’t be shared or configured."
+            />
+          );
         if (!canConfigureProject(project, role, uid))
-          return <Notice title="No access" body="Only the project owner can change these settings." />
+          return (
+            <Notice
+              title="No access"
+              body="Only the project owner can change these settings."
+            />
+          );
 
         return (
           <PageLayout variant="medium">
@@ -203,51 +267,116 @@ export default function ProjectSettings() {
               <h2 className="mb-3 text-sm font-semibold">General access</h2>
               <div
                 className={cn(
-                  'flex items-center gap-3 rounded-xl border p-4 transition-colors',
-                  isPublic ? 'border-primary/50 bg-primary/5' : 'border-border',
+                  "flex items-center gap-3 rounded-xl border p-4 transition-colors",
+                  isPublic ? "border-primary/50 bg-primary/5" : "border-border",
                 )}
               >
-                <span className={cn(isPublic ? 'text-foreground' : 'text-muted-foreground')}>
-                  {isPublic ? <Globe className="size-5" /> : <Lock className="size-5" />}
+                <span
+                  className={cn(
+                    isPublic ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {isPublic ? (
+                    <Globe className="size-5" />
+                  ) : (
+                    <Lock className="size-5" />
+                  )}
                 </span>
                 <div className="flex-1">
                   <div className="text-sm font-semibold">
-                    {isPublic ? 'Public' : members && members.length ? 'Shared' : 'Private'}
+                    {isPublic
+                      ? "Public"
+                      : members && members.length
+                        ? "Shared"
+                        : "Private"}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {isPublic
-                      ? 'Anyone, including logged-out visitors, can view.'
-                      : 'Only you, staff, and invited people.'}
+                      ? "Anyone, including logged-out visitors, can view."
+                      : "Only you, staff, and invited people."}
                   </div>
                 </div>
-                <Switch checked={isPublic} disabled={busy} onCheckedChange={() => void togglePublic()} />
+                <Switch
+                  checked={isPublic}
+                  disabled={busy}
+                  onCheckedChange={() => void togglePublic()}
+                />
               </div>
+
+              {isPublic && (
+                <div className="mt-3 rounded-xl border border-border p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold">
+                        Default permission
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        What everyone with access can do — no invite needed.
+                      </div>
+                    </div>
+                    <RoleSelect
+                      value={publicRole}
+                      disabled={busy}
+                      onChange={(r) => void changePublicRole(r)}
+                    />
+                  </div>
+                  {publicRole === "editor" && (
+                    <p className="mt-3 flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      <AlertTriangle className="size-4 shrink-0" />
+                      Anyone who can open this project can edit its content
+                      directly, without your approval.
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
 
             <section>
               <h2 className="mb-3 text-sm font-semibold">Invite people</h2>
-              <form className="flex flex-col gap-2" onSubmit={onInvite} noValidate>
+              <form
+                className="flex flex-col gap-2"
+                onSubmit={onInvite}
+                noValidate
+              >
                 <div className="flex flex-col gap-1.5">
                   <Input
                     type="email"
                     placeholder="email@example.com"
                     aria-invalid={!!errors.email}
-                    {...register('email')}
+                    {...register("email")}
                   />
-                  {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+                  {errors.email && (
+                    <p className="text-xs text-destructive">
+                      {errors.email.message}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <RoleSelect value={inviteRole} onChange={setInviteRole} hideViewer={isPublic} />
-                  <Button type="submit" disabled={busy} className="flex-1 md:flex-none">
+                  <RoleSelect
+                    value={inviteRole}
+                    onChange={setInviteRole}
+                    hideViewer={isPublic}
+                  />
+                  <Button
+                    type="submit"
+                    disabled={busy}
+                    className="flex-1 md:flex-none"
+                  >
                     <UserPlus /> Add
                   </Button>
                 </div>
               </form>
 
               <div className="mt-3 overflow-hidden rounded-xl border border-border">
-                {!members && <div className="p-3 text-center text-sm text-muted-foreground">Loading…</div>}
+                {!members && (
+                  <div className="p-3 text-center text-sm text-muted-foreground">
+                    Loading…
+                  </div>
+                )}
                 {members && members.length === 0 && (
-                  <div className="p-3 text-center text-sm text-muted-foreground">No one invited yet.</div>
+                  <div className="p-3 text-center text-sm text-muted-foreground">
+                    No one invited yet.
+                  </div>
                 )}
                 {members?.map((m) => (
                   <div
@@ -263,7 +392,12 @@ export default function ProjectSettings() {
                       size="sm"
                       className="min-w-0 flex-1"
                     />
-                    <RoleSelect value={m.role} disabled={busy} onChange={(r) => void changeRole(m.user_id, r)} hideViewer={isPublic} />
+                    <RoleSelect
+                      value={m.role}
+                      disabled={busy}
+                      onChange={(r) => void changeRole(m.user_id, r)}
+                      hideViewer={isPublic}
+                    />
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -284,8 +418,8 @@ export default function ProjectSettings() {
               </div>
             </section>
           </PageLayout>
-        )
+        );
       })()}
     </QuerySuspense>
-  )
+  );
 }

@@ -28,6 +28,7 @@ import { useTreeActions } from "../hooks/useTreeActions";
 import { useRouteContext } from "../hooks/useRouteContext";
 import { useQuickNotes } from "../hooks/useQuickNotes";
 import {
+  canCommentProject,
   canConfigureProject,
   canEditProject,
   projectVisibility,
@@ -267,6 +268,7 @@ export default function AppHeader() {
     (m) => m.project_id === project.id && m.user_id === uid,
   )?.role;
   const canEdit = canEditProject(project, role, uid, myMemberRole);
+  const canComment = canCommentProject(project, role, uid, myMemberRole);
   const canConfigure = canConfigureProject(project, role, uid);
   const isSettings = location.pathname === projectSettingsPath(project.slug);
   const visibility = projectVisibility(project, memberCount);
@@ -339,7 +341,7 @@ export default function AppHeader() {
       <HeaderShell
         items={items}
         actions={
-          (canEdit || ownerAvatar) ? (
+          (canEdit || canComment || ownerAvatar) ? (
             <>
               {canEdit && (
                 <>
@@ -352,6 +354,15 @@ export default function AppHeader() {
                     actions={menu}
                   />
                 </>
+              )}
+              {!canEdit && canComment && (
+                // Commenters suggest edits via split (desktop) or, since split is unavailable on
+                // mobile, via edit mode (suggestion mode) on mobile.
+                <ModeSwitch
+                  mode={mode}
+                  onChange={setMode}
+                  availableModes={isMobile ? ['view', 'edit'] : ['view', 'split']}
+                />
               )}
               {!canEdit && ownerAvatar}
             </>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { ArrowRight, Globe, LogOut, ShieldCheck, Upload } from 'lucide-react'
+import { Navigate, useNavigate } from 'react-router-dom'
+import { Globe, LogOut, ShieldCheck, Upload } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { AvatarCircle } from './ProfileAvatar'
 import ProjectCard from './ProjectCard'
+import LinkCard from './LinkCard'
 import { ProjectGlyph } from './EntityIcons'
 import PageLayout from './PageLayout'
 import PageHeader from './PageHeader'
@@ -167,21 +168,12 @@ export default function Profile() {
       {isStaff && (
         <div className="mt-6 max-md:hidden">
           <h2 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">Staff</h2>
-          <Link
+          <LinkCard
             to="/admin"
-            className="group flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-foreground">
-              <ShieldCheck className="size-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="font-medium">Admin dashboard</div>
-              <div className="text-sm text-muted-foreground">
-                {isAdmin ? 'Manage users and all projects' : 'Manage all projects'}
-              </div>
-            </div>
-            <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
-          </Link>
+            icon={<ShieldCheck />}
+            title="Admin dashboard"
+            description={isAdmin ? 'Manage users and all projects' : 'Manage all projects'}
+          />
         </div>
       )}
     </PageLayout>

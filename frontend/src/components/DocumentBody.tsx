@@ -1,10 +1,11 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useDocument } from '../hooks/useTree'
 import type { DocMeta } from '../hooks/useTree'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useAnnotationActions } from '../hooks/useAnnotations'
 import QuerySuspense from './QuerySuspense'
-import DocView from './DocView'
+import AnnotationLayer from './annotations/AnnotationLayer'
 import type { Mode } from './ModeSwitch'
 
 // The editor pulls in CodeMirror + every language grammar, so it's only loaded when the user
@@ -13,24 +14,35 @@ const Editor = lazy(() => import('./Editor'))
 
 // Renders a single document (whether a project doc or a quick note): loads its content, then shows
 // the read view or the editor depending on ?mode. Shared so both routes behave identically.
-export default function DocumentBody({ meta, canEdit }: { meta: DocMeta; canEdit: boolean }) {
+export default function DocumentBody({
+  meta,
+  canEdit,
+  canComment = false,
+}: {
+  meta: DocMeta
+  canEdit: boolean
+  /** Can this user leave comments or suggest edits? True for commenter/editor/owner. */
+  canComment?: boolean
+}) {
   const [searchParams] = useSearchParams()
   const docQuery = useDocument(meta.id)
   const isMobile = useIsMobile()
-  const [liveContent, setLiveContent] = useState<string | null>(null)
+  const annotationActions = useAnnotationActions(meta.id)
 
-  // Reset transient edit state when switching documents (adjust-state-during-render, no effect).
-  const [trackedDoc, setTrackedDoc] = useState(meta.id)
-  if (trackedDoc !== meta.id) {
-    setTrackedDoc(meta.id)
-    setLiveContent(null)
-  }
+  // True for users who can comment/suggest but cannot directly edit the document.
+  const isCommenterOnly = canComment && !canEdit
 
   // Desktop defaults to split. Mobile: quick notes default to edit (they're for quick capture),
   // regular docs default to view. An explicit ?mode= URL param always wins on mobile.
+  // Commenter-only users suggest edits via split on desktop; split is unavailable on mobile, so they
+  // suggest via edit mode there (the editor runs in suggestion mode either way). Both default to view.
   const urlMode = searchParams.get('mode') as Mode | null
   const mobileDefault: Mode = meta.is_quick_note ? 'edit' : 'view'
-  const mode: Mode = !canEdit
+  const mode: Mode = isCommenterOnly
+    ? isMobile
+      ? (urlMode === 'edit' ? 'edit' : 'view')
+      : (urlMode === 'split' ? 'split' : 'view')
+    : !canEdit
     ? 'view'
     : isMobile
     ? (urlMode === 'view' ? 'view' : urlMode === 'edit' ? 'edit' : mobileDefault)
@@ -52,13 +64,21 @@ export default function DocumentBody({ meta, canEdit }: { meta: DocMeta; canEdit
               key={docQuery.data.id}
               doc={docQuery.data}
               showPreview={mode === 'split'}
-              onContentChange={setLiveContent}
+              suggestionMode={isCommenterOnly}
+              onCreateSuggestion={isCommenterOnly ? annotationActions.createSuggestion : undefined}
             />
           </Suspense>
         ) : (
-          <div className="mx-auto max-w-205 px-8 pt-7 pb-28 max-md:px-4 max-md:pt-5">
-            <DocView content={liveContent ?? docQuery.data.content} />
-          </div>
+          // View mode hosts inline comments & suggested edits. They anchor to the SAVED content
+          // (offsets are spliced into documents.content on approve), so the annotation layer renders
+          // docQuery.data.content rather than any unsaved liveContent.
+          <AnnotationLayer
+            docId={docQuery.data.id}
+            projectId={docQuery.data.project_id}
+            content={docQuery.data.content}
+            canEdit={canEdit}
+            canComment={canComment}
+          />
         ))}
     </QuerySuspense>
   )

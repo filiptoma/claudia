@@ -112,36 +112,113 @@ export function stepWidth(current: number, dir: 1 | -1): number {
 export const clampImageWidth = clampWidth
 
 /**
+ * A piecewise map from preprocessed offsets back to raw `content` offsets. `marks` are sorted by
+ * `pp`; between consecutive marks the mapping is `raw = mark.raw + (offset - mark.pp)` (the text is
+ * identical there). A mark is recorded at content start and after every rewritten image token.
+ * With no sized images it is the single identity mark `[{ pp: 0, raw: 0 }]` (zero overhead).
+ */
+export interface PreprocessMap {
+  marks: { pp: number; raw: number }[]
+}
+
+/** Translate a raw `content` offset to a preprocessed-coordinate offset via a PreprocessMap. */
+export function rawToPreprocessed(raw: number, map: PreprocessMap): number {
+  const { marks } = map
+  // Greatest mark whose raw <= the query (marks are monotonic in both pp and raw).
+  let lo = 0
+  let hi = marks.length - 1
+  let best = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (marks[mid].raw <= raw) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  const mk = marks[best]
+  return mk.pp + (raw - mk.raw)
+}
+
+/** Translate a preprocessed-coordinate offset back to a raw `content` offset via a PreprocessMap. */
+export function preprocessedToRaw(pp: number, map: PreprocessMap): number {
+  const { marks } = map
+  // Greatest mark whose pp <= the query (binary search; marks is sorted ascending by pp).
+  let lo = 0
+  let hi = marks.length - 1
+  let best = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (marks[mid].pp <= pp) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  const mk = marks[best]
+  return mk.raw + (pp - mk.pp)
+}
+
+/**
+ * Like {@link preprocessImageSizes} but also returns a {@link PreprocessMap} translating the
+ * resulting (preprocessed) offsets back to raw `content` offsets. Rewriting `=WxH` → `#mdsize=WxH`
+ * changes string length, so source-range capture (which reads offsets off the rendered `.sp` spans,
+ * in preprocessed coordinates) must translate them back before storing/splicing the raw markdown.
+ */
+export function preprocessImageSizesMapped(content: string): { text: string; map: PreprocessMap } {
+  const marks: { pp: number; raw: number }[] = [{ pp: 0, raw: 0 }]
+  if (!content.includes('=')) return { text: content, map: { marks } } // fast path: identity map
+  let out = ''
+  let inFence = false
+  let fenceChar = ''
+  let rawBase = 0 // global raw offset of the current line's start
+  const lines = content.split('\n')
+  lines.forEach((text, li) => {
+    const fence = text.match(FENCE_RE)
+    if (fence) {
+      const ch = fence[1][0]
+      if (!inFence) {
+        inFence = true
+        fenceChar = ch
+      } else if (ch === fenceChar) {
+        inFence = false
+      }
+      out += text
+    } else if (inFence) {
+      out += text
+    } else {
+      let last = 0
+      const re = imageRe()
+      let m: RegExpExecArray | null
+      while ((m = re.exec(text)) !== null) {
+        const w = m[4]
+        const h = m[5]
+        if (!w && !h) continue // not a sized image — leave it in the unchanged run
+        const tokenStart = m.index
+        out += text.slice(last, tokenStart) // unchanged text before the token
+        const titlePart = m[3] ? ` "${m[3]}"` : ''
+        out += `![${m[1]}](${m[2]}#mdsize=${w || ''}x${h || ''}${titlePart})`
+        last = tokenStart + m[0].length
+        marks.push({ pp: out.length, raw: rawBase + last }) // start of the next unchanged run
+      }
+      out += text.slice(last)
+    }
+    if (li < lines.length - 1) out += '\n'
+    rawBase += text.length + 1
+  })
+  return { text: out, map: { marks } }
+}
+
+/**
  * Move HackMD `=WxH` size hints into a private `#mdsize=WxH` URL fragment so react-markdown parses
  * the image (it otherwise rejects the bare `=WxH` suffix and renders the whole thing as text).
  * Fenced code blocks are left untouched so example markdown still displays verbatim.
+ * Delegates to {@link preprocessImageSizesMapped} so the two can never drift.
  */
 export function preprocessImageSizes(content: string): string {
-  if (!content.includes('=')) return content // fast path: no possible size hint
-  let inFence = false
-  let fenceChar = ''
-  return content
-    .split('\n')
-    .map((text) => {
-      const fence = text.match(FENCE_RE)
-      if (fence) {
-        const ch = fence[1][0]
-        if (!inFence) {
-          inFence = true
-          fenceChar = ch
-        } else if (ch === fenceChar) {
-          inFence = false
-        }
-        return text
-      }
-      if (inFence) return text
-      return text.replace(imageRe(), (full, alt, url, title, w, h) => {
-        if (!w && !h) return full
-        const titlePart = title ? ` "${title}"` : ''
-        return `![${alt}](${url}#mdsize=${w || ''}x${h || ''}${titlePart})`
-      })
-    })
-    .join('\n')
+  return preprocessImageSizesMapped(content).text
 }
 
 /** Read the `#mdsize=WxH` fragment a preprocessed src may carry. Returns the cleaned src + size. */

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
 import { useRouteContext } from '../hooks/useRouteContext'
-import { canEditProject } from '../lib/access'
+import { canCommentProject, canEditProject } from '../lib/access'
 import { docLabel } from '../lib/labels'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { APP_NAME } from '../lib/brand'
@@ -18,6 +18,7 @@ export default function DocPage() {
     ? members.find((m) => m.project_id === project.id && m.user_id === uid)?.role
     : undefined
   const canEdit = project ? canEditProject(project, role, uid, myMemberRole) : false
+  const canComment = project ? canCommentProject(project, role, uid, myMemberRole) : false
 
   // Tab title is the document's own title (covers regular docs and quick notes alike).
   useDocumentTitle(meta ? docLabel(meta) : APP_NAME)
@@ -37,5 +38,5 @@ export default function DocPage() {
     )
   }
 
-  return <DocumentBody meta={meta} canEdit={canEdit} />
+  return <DocumentBody meta={meta} canEdit={canEdit} canComment={canComment} />
 }

@@ -49,7 +49,8 @@ function DropdownMenuItem({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
   inset?: boolean
-  variant?: 'default' | 'destructive'
+  // Color accent shared by icon, text and hover/focus background. Reuse across every menu in the app.
+  variant?: 'default' | 'success' | 'destructive'
 }) {
   return (
     <DropdownMenuPrimitive.Item
@@ -60,6 +61,7 @@ function DropdownMenuItem({
         "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         'focus:bg-accent focus:text-accent-foreground',
         'data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:[&_svg]:!text-destructive',
+        'data-[variant=success]:text-emerald-600 dark:data-[variant=success]:text-emerald-400 data-[variant=success]:focus:bg-emerald-500/10 data-[variant=success]:focus:text-emerald-600 dark:data-[variant=success]:focus:text-emerald-400 data-[variant=success]:[&_svg]:text-emerald-600! dark:data-[variant=success]:[&_svg]:text-emerald-400!',
         'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         className,
       )}

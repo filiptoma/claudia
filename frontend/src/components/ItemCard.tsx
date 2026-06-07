@@ -35,7 +35,9 @@ export default function ItemCard({
   return (
     <div
       className={cn(
-        'group relative rounded-xl transition-transform duration-150 hover:-translate-y-0.5',
+        // transform-gpu keeps the whole card on one compositing layer so its text translates smoothly
+        // with the frame on hover (otherwise the title re-rasterizes each frame and appears to lag).
+        'group relative transform-gpu rounded-xl transition-transform duration-150 ease-out hover:-translate-y-0.5',
         className,
       )}
     >

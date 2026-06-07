@@ -8,9 +8,13 @@ import remarkMath from 'remark-math'
 import rehypeSlug from 'rehype-slug'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
+import type { PluggableList } from 'unified'
 import 'katex/dist/katex.min.css'
 import { STORAGE_PREFIX } from '../lib/storage'
-import { preprocessImageSizes, readSizeFragment } from '../lib/mdImage'
+import { preprocessImageSizesMapped, rawToPreprocessed, readSizeFragment } from '../lib/mdImage'
+import rehypeSourceSpans from '../lib/sourceSpans'
+import rehypeSuggestionDiff from '../lib/suggestionDiff'
+import type { SuggestionRange } from '../lib/suggestionDiff'
 import MdImage from './MdImage'
 import ImageLightbox from './ImageLightbox'
 import { cn } from '@/lib/utils'
@@ -102,6 +106,8 @@ export default function Markdown({
   onToggleTask,
   onResizeImage,
   scrollRoot,
+  annotate = false,
+  suggestions,
 }: {
   children: string
   images?: Record<string, string>
@@ -114,6 +120,12 @@ export default function Markdown({
   /** The scrollable container for in-page `#` anchor jumps. If omitted, the nearest scrollable
    *  ancestor is used. Passing it explicitly (the editor's preview pane) avoids any ambiguity. */
   scrollRoot?: () => HTMLElement | null
+  /** When set (view-mode annotation layer), wrap each text run in `<span class="sp" data-s data-e>`
+   *  carrying its source offsets, so rendered selections can be mapped back to the markdown. */
+  annotate?: boolean
+  /** Pending suggested edits to render inline as a diff (requires `annotate`). Offsets are raw
+   *  `content` coordinates; they're translated to the rendered (preprocessed) space here. */
+  suggestions?: { id: string; sourceStart: number; sourceEnd: number; suggested: string }[]
 }) {
   const navigate = useNavigate()
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
@@ -125,8 +137,32 @@ export default function Markdown({
     [images, openLightbox, onToggleTask, onResizeImage],
   )
 
-  // Preprocess HackMD `=WIDTHx` size hints into a parseable URL fragment before rendering.
-  const source = useMemo(() => preprocessImageSizes(children), [children])
+  // Preprocess HackMD `=WIDTHx` size hints into a parseable URL fragment before rendering; the map
+  // lets us translate suggestion ranges (raw coords) into the preprocessed space the HAST uses.
+  const { text: source, map } = useMemo(() => preprocessImageSizesMapped(children), [children])
+
+  const ppSuggestions = useMemo<SuggestionRange[]>(
+    () =>
+      annotate && suggestions
+        ? suggestions.map((s) => ({
+            id: s.id,
+            ppStart: rawToPreprocessed(s.sourceStart, map),
+            ppEnd: rawToPreprocessed(s.sourceEnd, map),
+            suggested: s.suggested,
+          }))
+        : [],
+    [annotate, suggestions, map],
+  )
+
+  // Base rehype pipeline; in annotate mode, render suggestion diffs then stamp source offsets onto
+  // text runs LAST (after highlight/katex) so only original, position-bearing text gets wrapped.
+  const rehypePlugins = useMemo<PluggableList>(() => {
+    const base: PluggableList = [rehypeSlug, [rehypeHighlight, { detect: false, ignoreMissing: true }], rehypeKatex]
+    if (!annotate) return base
+    return ppSuggestions.length > 0
+      ? [...base, rehypeSuggestionDiff(ppSuggestions), rehypeSourceSpans]
+      : [...base, rehypeSourceSpans]
+  }, [annotate, ppSuggestions])
 
   // Delegated link handling on the wrapper (robust regardless of how react-markdown renders anchors):
   //  • `#slug`  → scroll that heading to the top of its OWN scroll container (the preview/read panel),
@@ -175,8 +211,9 @@ export default function Markdown({
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         // detect:false → fenced blocks without a language stay plain text (no mis-highlighting);
-        // only blocks with an explicit, known language get colored.
-        rehypePlugins={[rehypeSlug, [rehypeHighlight, { detect: false, ignoreMissing: true }], rehypeKatex]}
+        // only blocks with an explicit, known language get colored. In annotate mode a final plugin
+        // wraps text runs in `.sp` spans carrying source offsets (see rehypePlugins above).
+        rehypePlugins={rehypePlugins}
         components={components}
         urlTransform={urlTransform}
       >

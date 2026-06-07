@@ -20,7 +20,7 @@ export default function PublicProjectCard({ project }: { project: PublicProject 
   return (
     <Link
       to={projectPath(project.slug)}
-      className="group flex flex-col rounded-xl border border-border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+      className="group flex transform-gpu flex-col rounded-xl border border-border bg-card shadow-sm transition-[transform,box-shadow,border-color] duration-150 ease-out hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
     >
       {/* Name + document count */}
       <div className="flex items-start gap-3 p-5">

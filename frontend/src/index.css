@@ -589,3 +589,97 @@
 .dark .md .hljs-template-variable {
   color: oklch(0.74 0.09 200);
 }
+
+/* ============================================================================
+   Annotations (inline comments & suggested edits). Highlights are painted with the CSS Custom
+   Highlight API over react-markdown's React-owned DOM — no wrapping <mark>, so reconciliation is
+   never fought. `.sp` is the inert text-run wrapper the annotate-mode rehype plugin emits; it must
+   not change layout/measurement, so it stays a plain inline box. Degrades gracefully where the
+   Highlight API is unsupported (cards still work; just no inline tint).
+   ========================================================================== */
+.md .sp {
+  /* Inert: carries data-s/data-e only. Inline so flat-offset measurement matches the source text. */
+  all: unset;
+}
+
+::highlight(an-comment) {
+  background-color: oklch(0.82 0.155 88 / 0.32); /* warm primary tint */
+}
+::highlight(an-comment-active) {
+  background-color: oklch(0.82 0.155 88 / 0.55);
+}
+::highlight(an-suggestion) {
+  background-color: oklch(0.72 0.13 250 / 0.22); /* indigo tint */
+  text-decoration: underline;
+  text-decoration-color: oklch(0.55 0.16 264 / 0.7);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+::highlight(an-suggestion-active) {
+  background-color: oklch(0.72 0.13 250 / 0.4);
+  text-decoration: underline;
+  text-decoration-color: oklch(0.55 0.16 264);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+.dark ::highlight(an-comment) {
+  background-color: oklch(0.82 0.155 88 / 0.28);
+  color: oklch(0.99 0 0);
+}
+.dark ::highlight(an-comment-active) {
+  background-color: oklch(0.82 0.155 88 / 0.45);
+  color: oklch(0.99 0 0);
+}
+.dark ::highlight(an-suggestion) {
+  background-color: oklch(0.62 0.16 264 / 0.3);
+}
+.dark ::highlight(an-suggestion-active) {
+  background-color: oklch(0.62 0.16 264 / 0.5);
+}
+
+/* Inline suggested-edit diff (rendered by rehypeSuggestionDiff) — Google-Docs style: the original and
+   the suggestion interleaved, deletions struck through, an indigo border around the change, NO colour
+   and no background (colour is reserved for the red/green diff in the cards). */
+.md .sug {
+  border: 1px solid oklch(0.55 0.16 264 / 0.5);
+  border-radius: 0.3rem;
+  padding: 0 0.15rem;
+}
+.md .sug-del,
+.md .sug-ins {
+  border: 1px solid oklch(0.55 0.16 264 / 0.5);
+  border-radius: 0.25rem;
+  padding: 0 0.1rem;
+}
+.md .sug[data-active],
+.md .sug-del[data-active],
+.md .sug-ins[data-active] {
+  border-color: oklch(0.55 0.16 264);
+  box-shadow: 0 0 0 1px oklch(0.55 0.16 264 / 0.45);
+}
+.md .sug del,
+.md .sug-del {
+  text-decoration-line: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: currentColor;
+}
+.md .sug ins,
+.md .sug-ins {
+  text-decoration: none;
+  white-space: pre-wrap;
+}
+
+/* Inline @mention chip, rendered in comment/suggestion bodies. */
+.mention-chip {
+  display: inline;
+  border-radius: 0.3rem;
+  padding: 0 0.25rem;
+  font-weight: 600;
+  color: var(--link);
+  background-color: oklch(0.82 0.155 88 / 0.18);
+  white-space: nowrap;
+}
+.dark .mention-chip {
+  color: oklch(0.82 0.13 88);
+  background-color: oklch(0.82 0.155 88 / 0.16);
+}
