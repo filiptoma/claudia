@@ -55,10 +55,52 @@ function DialogContent({
   const keyboardStyle: React.CSSProperties | undefined = vp?.keyboardOpen
     ? { top: vp.offsetTop + vp.height / 2, maxHeight: vp.height - 16, overflowY: 'auto' }
     : undefined
+
+  // With the keyboard up the dialog itself becomes the scroll container (keyboardStyle above), but
+  // nothing scrolls the focused field into view within it — a position:fixed dialog isn't scrolled
+  // into view by the browser or Radix, so a field below the fold (e.g. the password) stays hidden
+  // behind the keyboard. Center it by nudging only the dialog's own scrollTop (never the window, which
+  // would re-introduce the stuck-viewport bug useKeyboardScrollReset guards against).
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  const keyboardOpen = vp?.keyboardOpen ?? false
+  const keyboardOpenRef = React.useRef(keyboardOpen)
+  React.useEffect(() => {
+    keyboardOpenRef.current = keyboardOpen
+  }, [keyboardOpen])
+
+  const centerFocused = React.useCallback(() => {
+    const container = contentRef.current
+    const el = document.activeElement
+    if (!container || !(el instanceof HTMLElement) || !container.contains(el)) return
+    const c = container.getBoundingClientRect()
+    const e = el.getBoundingClientRect()
+    container.scrollTop += e.top - c.top - (c.height - e.height) / 2
+  }, [])
+
+  // Center the focused field when the keyboard opens / its height settles...
+  React.useEffect(() => {
+    if (!keyboardOpen) return
+    const id = requestAnimationFrame(centerFocused)
+    return () => cancelAnimationFrame(id)
+  }, [keyboardOpen, vp?.height, centerFocused])
+
+  // ...and when focus moves between fields while it is already open (no viewport change to react to).
+  React.useEffect(() => {
+    const node = contentRef.current
+    if (!node) return
+    const onFocusIn = () => {
+      if (!keyboardOpenRef.current) return
+      requestAnimationFrame(centerFocused)
+    }
+    node.addEventListener('focusin', onFocusIn)
+    return () => node.removeEventListener('focusin', onFocusIn)
+  }, [centerFocused])
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
+        ref={contentRef}
         data-slot="dialog-content"
         className={cn(
           'fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4',

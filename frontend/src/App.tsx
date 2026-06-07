@@ -20,6 +20,7 @@ import RequestPage from './components/RequestPage'
 import { FullPageSpinner } from './components/ui/spinner'
 import { useAuth } from './context/AuthContext'
 import { fetchDocument, treeKeys, useTree } from './hooks/useTree'
+import { useKeyboardScrollReset } from './hooks/useKeyboardScrollReset'
 
 // Warm the ['document', id] cache in the background so first navigations are instant too.
 function usePrefetchDocuments() {
@@ -40,6 +41,7 @@ export default function App() {
   const { loading: authLoading } = useAuth()
   const tree = useTree()
   usePrefetchDocuments()
+  useKeyboardScrollReset()
 
   // Whole-app gate: don't render the shell until the required initializations are ready — the
   // session/role (auth) AND the core tree the always-visible sidebar + routing depend on.

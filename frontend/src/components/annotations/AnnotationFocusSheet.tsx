@@ -44,11 +44,23 @@ export default function AnnotationFocusSheet({
   // Unresolved comments + pending suggestions in document order — the set the ◂ ▸ controls cycle
   // through. Activating a neighbour scrolls it clear of the sheet (handled by the annotation engine).
   const orderedKeys = useMemo(() => {
+    // Source-offset lookup: the precise char position in the markdown, i.e. true reading order.
+    const offset = new Map<string, number>()
+    for (const t of threads) offset.set(t.id, t.source_start)
+    for (const s of suggestions) offset.set(s.id, s.source_start)
     const keys = [
       ...threads.filter((t) => !t.resolved).map((t) => t.id),
       ...suggestions.filter((s) => s.status === 'pending').map((s) => s.id),
     ]
-    return keys.sort((a, b) => (placements[a] ?? Infinity) - (placements[b] ?? Infinity))
+    // Top-to-bottom by rendered Y, then left-to-right within a line via the source offset. Rounding
+    // the Y keeps sub-pixel jitter from outranking the offset, so two annotations sharing a line
+    // cycle in reading order rather than creation order.
+    return keys.sort((a, b) => {
+      const ay = Math.round(placements[a] ?? Infinity)
+      const by = Math.round(placements[b] ?? Infinity)
+      if (ay !== by) return ay - by
+      return (offset.get(a) ?? 0) - (offset.get(b) ?? 0)
+    })
   }, [threads, suggestions, placements])
 
   if (!activeKey) return null
@@ -79,7 +91,6 @@ export default function AnnotationFocusSheet({
     <div
       ref={sheetRef}
       className="fixed bottom-0 left-0 right-0 z-50 flex max-h-[50dvh] flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl"
-      onClick={(e) => e.stopPropagation()}
     >
       <div className="flex shrink-0 justify-center pt-2 pb-1">
         <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
