@@ -307,7 +307,7 @@ export default function AnnotationSidebar() {
   const isMobile = useIsMobile();
 
   const header = (
-    <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 md:px-3 md:py-2.5">
+    <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 md:px-3 md:py-[9.5px]">
       <span className="text-sm font-semibold">
         Comments &amp; Edit suggestions
       </span>
