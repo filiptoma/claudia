@@ -235,7 +235,7 @@ function ToolButton({
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 text-muted-foreground hover:text-foreground max-md:size-10 max-md:[&_svg]:size-5"
+          className="size-8 shrink-0 text-muted-foreground hover:text-foreground max-md:size-10 max-md:[&_svg]:size-5"
           aria-label={title}
           onClick={onClick}
         >
@@ -346,34 +346,30 @@ export default function EditorToolbar({
     )
   }
 
-  // Each cluster stays on a single line (shrink-0, no internal wrap); the outer row wraps *between*
-  // clusters, so a row break lands on a divider — core formatting on one row, support actions on the
-  // next — rather than splitting a group mid-way.
+  // Individual buttons are the direct children of the wrapping row, so each icon wraps to the next line
+  // on its own when the pane is narrow (rather than a whole cluster overflowing). The labelled table
+  // groups below stay grouped (they wrap as units) since their label must travel with their buttons.
   return (
     <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1">
       {/* Core formatting actions */}
-      <div className="flex shrink-0 items-center gap-0.5">
-        <ButtonRow buttons={BASE_BUTTONS} run={run} />
-      </div>
+      <ButtonRow buttons={BASE_BUTTONS} run={run} />
 
       <ToolSep />
 
-      {/* Support / insert actions — wrap to the next row as a unit when space is tight. */}
-      <div className="flex shrink-0 items-center gap-0.5">
-        {/* Insert table — shown unless the cursor is already inside a table (then table controls show). */}
-        {!inTable && (
-          <ToolButton title="Insert table" onClick={run(insertBlock(TABLE_TEMPLATE))}>
-            <Table />
-          </ToolButton>
-        )}
-        <ButtonRow buttons={INSERT_BUTTONS} run={run} />
-        <ToolButton title="Insert image" onClick={onImageClick}>
-          <ImageIcon />
+      {/* Support / insert actions */}
+      {/* Insert table — shown unless the cursor is already inside a table (then table controls show). */}
+      {!inTable && (
+        <ToolButton title="Insert table" onClick={run(insertBlock(TABLE_TEMPLATE))}>
+          <Table />
         </ToolButton>
-        <ToolButton title="Insert reference (type / in the editor)" onClick={onRefClick}>
-          <AtSign />
-        </ToolButton>
-      </div>
+      )}
+      <ButtonRow buttons={INSERT_BUTTONS} run={run} />
+      <ToolButton title="Insert image" onClick={onImageClick}>
+        <ImageIcon />
+      </ToolButton>
+      <ToolButton title="Insert reference (type / in the editor)" onClick={onRefClick}>
+        <AtSign />
+      </ToolButton>
 
       {/* Table controls (Row / Column / Alignment) — each its own cluster, only while in a table. */}
       {inTable && (
