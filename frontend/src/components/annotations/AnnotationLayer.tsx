@@ -43,9 +43,11 @@ export default function AnnotationLayer({
 
   const showToolbar = canComment || eng.hasAnnotations
 
-  // Bottom padding: when the mobile focus sheet is active, push content above it.
+  // Bottom padding: when the touch focus sheet (short bottom sheet) is active, push content above it.
   const docPaddingBottom =
-    eng.isMobile && eng.activeKey && eng.focusSheetHeight > 0 ? `${eng.focusSheetHeight + 24}px` : undefined
+    eng.focusMode === 'sheet' && eng.activeKey && eng.focusSheetHeight > 0
+      ? `${eng.focusSheetHeight + 24}px`
+      : undefined
 
   return (
     <AnnotationContext.Provider value={eng.ctx}>
@@ -63,7 +65,7 @@ export default function AnnotationLayer({
               <DocView content={content} annotate suggestions={eng.suggestionDiffs} />
             </div>
 
-            {!eng.isMobile &&
+            {eng.listMode === 'sidebar' &&
               eng.marginGroups.map((group) => (
                 <MarginIndicatorGroup
                   key={group.items.map((i) => i.key).join(',')}

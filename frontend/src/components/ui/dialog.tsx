@@ -3,6 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { XIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { useVisualViewport } from '@/hooks/useVisualViewport'
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
@@ -41,10 +42,19 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  style,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  // Keep the dialog centered within the VISIBLE viewport when the on-screen keyboard is up. `fixed` is
+  // anchored to the layout viewport, which iOS/iPadOS/WebKit do not shrink for the keyboard — so a
+  // focused input in this vertically-centered dialog would otherwise sit hidden behind the keyboard.
+  // (`top` overrides the `top-1/2` class; the `-translate-y-1/2` centering and zoom animation are kept.)
+  const vp = useVisualViewport()
+  const keyboardStyle: React.CSSProperties | undefined = vp?.keyboardOpen
+    ? { top: vp.offsetTop + vp.height / 2, maxHeight: vp.height - 16, overflowY: 'auto' }
+    : undefined
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -57,6 +67,7 @@ function DialogContent({
           'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           className,
         )}
+        style={{ ...style, ...keyboardStyle }}
         {...props}
       >
         {children}

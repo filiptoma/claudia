@@ -111,7 +111,10 @@ export default function AppHeader() {
 
   // Owner avatar shown in the header for public projects — hidden on mobile to save space.
   const ownerAvatar =
-    !isMobile && project?.is_public && !project.is_workspace && project.owner ? (
+    !isMobile &&
+    project?.is_public &&
+    !project.is_workspace &&
+    project.owner ? (
       <ProfileAvatar
         userId={project.owner}
         name={ownerQuery.data?.name ?? null}
@@ -246,10 +249,13 @@ export default function AppHeader() {
     // Logged-out visitors see the public landing ("Home"); signed-in users get their "Dashboard".
     let items: Crumb[] = [{ label: uid ? "Dashboard" : "Home" }];
     if (location.pathname === "/profile") items = [{ label: "Profile" }];
-    else if (location.pathname.startsWith("/users/")) items = [{ label: "Public profile" }];
-    else if (location.pathname === "/explore") items = [{ label: "Public projects" }];
+    else if (location.pathname.startsWith("/users/"))
+      items = [{ label: "Public profile" }];
+    else if (location.pathname === "/explore")
+      items = [{ label: "Public projects" }];
     else if (location.pathname === "/bug") items = [{ label: "Report a bug" }];
-    else if (location.pathname === "/request") items = [{ label: "Feature request" }];
+    else if (location.pathname === "/request")
+      items = [{ label: "Feature request" }];
     else if (location.pathname === "/admin") items = [{ label: "Admin" }];
     else if (location.pathname === "/admin/users")
       items = [{ label: "Admin", to: "/admin" }, { label: "Users" }];
@@ -341,7 +347,7 @@ export default function AppHeader() {
       <HeaderShell
         items={items}
         actions={
-          (canEdit || canComment || ownerAvatar) ? (
+          canEdit || canComment || ownerAvatar ? (
             <>
               {canEdit && (
                 <>
@@ -361,7 +367,9 @@ export default function AppHeader() {
                 <ModeSwitch
                   mode={mode}
                   onChange={setMode}
-                  availableModes={isMobile ? ['view', 'edit'] : ['view', 'split']}
+                  availableModes={
+                    isMobile ? ["view", "edit"] : ["view", "split"]
+                  }
                 />
               )}
               {!canEdit && ownerAvatar}
@@ -409,7 +417,7 @@ export default function AppHeader() {
       <HeaderShell
         items={items}
         actions={
-          (canEdit || ownerAvatar) ? (
+          canEdit || ownerAvatar ? (
             <>
               {canEdit && (
                 <>
@@ -421,8 +429,12 @@ export default function AppHeader() {
                           label: "New document",
                           icon: <FilePlus />,
                           onSelect: async () => {
-                            const d = await actions.newDocument(project, folder.id);
-                            if (d) navigate(docSplitPath(project.slug, d, folders));
+                            const d = await actions.newDocument(
+                              project,
+                              folder.id,
+                            );
+                            if (d)
+                              navigate(docSplitPath(project.slug, d, folders));
                           },
                         },
                       ]}
@@ -521,11 +533,13 @@ export default function AppHeader() {
     <HeaderShell
       items={[projectCrumb]}
       actions={
-        (canEdit || ownerAvatar) ? (
+        canEdit || ownerAvatar ? (
           <>
             {canEdit && (
               <>
-                {!projectEmpty && <CreateMenu actions={createActions} compact={isMobile} />}
+                {!projectEmpty && (
+                  <CreateMenu actions={createActions} compact={isMobile} />
+                )}
                 {ownerAvatar}
                 <ActionsMenu
                   alwaysVisible
@@ -551,13 +565,13 @@ function HeaderShell({
 }) {
   const { collapsed, toggle, openMobile } = useSidebar();
   return (
-    <header className="flex h-13 shrink-0 items-center border-b border-border bg-background/80 px-2 backdrop-blur-sm md:px-3">
+    <header className="flex h-[calc(3.25rem+env(safe-area-inset-top))] shrink-0 items-center border-b border-border bg-background/80 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-sm md:px-3">
       {/* Brand zone: logo. Always visible regardless of sidebar state. On mobile the app name text
           is hidden so we pull in the padding significantly to reclaim horizontal space. */}
       <Link
         to="/"
         aria-label={APP_NAME}
-        className="flex items-center gap-2 text-base font-bold tracking-tight border-r h-full pl-1.5 pr-2 border-border md:pl-2 md:pr-6"
+        className="flex items-center gap-2 text-base font-bold tracking-tight border-r h-13 pl-1.5 pr-2 border-border md:pl-2 md:pr-6"
       >
         <img
           src={astroLogoBlack}
@@ -610,7 +624,9 @@ function HeaderShell({
         <Breadcrumbs items={items} />
       </div>
       {actions && (
-        <div className="flex shrink-0 items-center gap-1.5 max-md:gap-1">{actions}</div>
+        <div className="flex shrink-0 items-center gap-1.5 max-md:gap-1">
+          {actions}
+        </div>
       )}
     </header>
   );

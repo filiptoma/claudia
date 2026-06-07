@@ -8,15 +8,15 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAnnotationCtx, DRAFT_KEY } from "../../context/AnnotationContext";
-import { useIsMobile } from "../../hooks/useIsMobile";
 import CommentThreadCard from "./CommentThreadCard";
 import SuggestionCard from "./SuggestionCard";
 
-// Backdrop for the mobile bottom sheet (tapping it closes the sheet).
+// Backdrop for the full-height bottom sheet (tapping it closes the sheet). Only rendered in the
+// bottom-sheet branch, so it must not be width-gated (the sheet also serves portrait tablets ≥ md).
 function Backdrop({ onClick }: { onClick: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] md:hidden"
+      className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]"
       onClick={onClick}
     />
   );
@@ -253,7 +253,7 @@ function SidebarBody() {
 
       <TabsContent
         value="comments"
-        className="m-0 flex min-h-0 flex-1 flex-col overflow-y-auto p-3"
+        className="m-0 flex min-h-0 flex-1 flex-col overflow-y-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
         {shownUnresolvedThreads.length === 0 &&
           shownResolvedThreads.length === 0 && (
@@ -275,7 +275,7 @@ function SidebarBody() {
 
       <TabsContent
         value="suggestions"
-        className="m-0 flex min-h-0 flex-1 flex-col overflow-y-auto p-3"
+        className="m-0 flex min-h-0 flex-1 flex-col overflow-y-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
         {shownPendingSuggestions.length === 0 &&
           shownResolvedSuggestions.length === 0 && (
@@ -299,15 +299,22 @@ function SidebarBody() {
 }
 
 /**
- * The annotation list sidebar. Desktop: fixed right overlay. Mobile: full-height bottom sheet.
- * Selecting a card never closes the sidebar; closing the sidebar clears the selection.
+ * The annotation list. Rendered as a fixed right rail (`listMode === 'sidebar'`: desktops, laptops,
+ * landscape tablets) or a full-height bottom sheet (`listMode === 'sheet'`: phones and portrait
+ * tablets). Selecting a card never closes it; closing it clears the selection.
  */
 export default function AnnotationSidebar() {
-  const { sidebarOpen, closeSidebar } = useAnnotationCtx();
-  const isMobile = useIsMobile();
+  const { sidebarOpen, closeSidebar, listMode } = useAnnotationCtx();
 
   const header = (
-    <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 md:px-3 md:py-[9.5px]">
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-between border-b border-border",
+        // Compact in the rail; roomier in the bottom sheet (gated on listMode, not a width breakpoint,
+        // so portrait tablets that show the sheet above md still get the roomier header).
+        listMode === "sidebar" ? "px-3 py-[9.5px]" : "px-4 py-3",
+      )}
+    >
       <span className="text-sm font-semibold">
         Comments &amp; Edit suggestions
       </span>
@@ -322,11 +329,11 @@ export default function AnnotationSidebar() {
     </div>
   );
 
-  if (!isMobile) {
+  if (listMode === "sidebar") {
     return (
       <aside
         className={cn(
-          "fixed top-13 right-0 bottom-0 z-30 flex w-74 xl:w-88 flex-col border-l border-border bg-background shadow-2xl",
+          "fixed top-[calc(3.25rem+env(safe-area-inset-top))] right-0 bottom-0 z-30 flex w-74 xl:w-88 flex-col border-l border-border bg-background shadow-2xl",
           "transition-transform duration-200",
           sidebarOpen ? "translate-x-0" : "translate-x-full",
         )}

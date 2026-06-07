@@ -18,7 +18,8 @@ import SelectionToolbar from '../components/annotations/SelectionToolbar'
 import AnnotationSidebar from '../components/annotations/AnnotationSidebar'
 import AnnotationFloatingPanel from '../components/annotations/AnnotationFloatingPanel'
 import AnnotationFocusSheet from '../components/annotations/AnnotationFocusSheet'
-import { useIsMobile } from './useIsMobile'
+import { useAnnotationLayout } from './useAnnotationLayout'
+import type { FocusMode, ListMode } from './useAnnotationLayout'
 
 interface SelInfo {
   rect: DOMRect
@@ -84,7 +85,10 @@ export interface AnnotationEngine {
   /** Pending suggestions in the shape DocView/Markdown expect for inline diff rendering. */
   suggestionDiffs: { id: string; sourceStart: number; sourceEnd: number; suggested: string }[]
   activate: (key: string) => void
-  isMobile: boolean
+  /** Single active/creating annotation UI: 'popover' (non-touch) or 'sheet' (touch short bottom sheet). */
+  focusMode: FocusMode
+  /** Comments & suggestions list UI: 'sidebar' (right rail) or 'sheet' (full-height bottom sheet). */
+  listMode: ListMode
   /** Measured height of the mobile focus sheet — pad the doc bottom by this so content isn't hidden. */
   focusSheetHeight: number
   activeKey: string | null
@@ -122,7 +126,7 @@ export function useAnnotationEngine({
   floatingTop: number
 }): AnnotationEngine {
   const { uid } = useAuth()
-  const isMobile = useIsMobile()
+  const { focusMode, listMode } = useAnnotationLayout()
   const { threads, messagesByThread } = useDocumentComments(docId)
   const { suggestions, messagesBySuggestion } = useDocumentSuggestions(docId)
   const actions = useAnnotationActions(docId)
@@ -318,20 +322,22 @@ export function useAnnotationEngine({
   const activate = useCallback(
     (key: string) => {
       setActiveKey(key)
-      // On mobile the focus sheet covers the bottom of the screen; we scroll once its height is known
-      // (the effect below) so the anchor lands clear of it. Desktop scrolls immediately.
-      if (!isMobile) scrollToKey(key)
+      // When the short bottom sheet will cover the bottom of the screen (touch + sidebar closed) we
+      // scroll once its height is known (the effect below) so the anchor lands clear of it. Otherwise
+      // (desktop popover, or the sidebar/rail is open) scroll immediately.
+      if (!(focusMode === 'sheet' && !sidebarOpen)) scrollToKey(key)
     },
-    [scrollToKey, isMobile],
+    [scrollToKey, focusMode, sidebarOpen],
   )
 
-  // Mobile: once the focus sheet is open and measured, scroll the active annotation's anchor into the
-  // region above it. Drafts grow while the user types, so key those by id alone (scroll once); real
-  // annotations are stable, so key them by height too — re-checking visibility after the sheet settles
-  // and when cycling (◂ ▸) to a taller neighbour that the just-measured height reveals as hidden.
+  // Touch (short bottom sheet): once the focus sheet is open and measured, scroll the active
+  // annotation's anchor into the region above it. Drafts grow while the user types, so key those by id
+  // alone (scroll once); real annotations are stable, so key them by height too — re-checking
+  // visibility after the sheet settles and when cycling (◂ ▸) to a taller neighbour that the
+  // just-measured height reveals as hidden.
   const lastScrollRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!isMobile || sidebarOpen || !activeKey || focusSheetHeight <= 0) {
+    if (focusMode !== 'sheet' || sidebarOpen || !activeKey || focusSheetHeight <= 0) {
       if (!activeKey) lastScrollRef.current = null
       return
     }
@@ -339,7 +345,7 @@ export function useAnnotationEngine({
     if (lastScrollRef.current === sig) return
     lastScrollRef.current = sig
     scrollToKey(activeKey, focusSheetHeight + 24)
-  }, [isMobile, sidebarOpen, activeKey, focusSheetHeight, scrollToKey])
+  }, [focusMode, sidebarOpen, activeKey, focusSheetHeight, scrollToKey])
 
   const deactivate = useCallback(() => setActiveKey(null), [])
 
@@ -436,13 +442,13 @@ export function useAnnotationEngine({
         return
       }
     }
-    // Empty space → dismiss the desktop popover (cancelling a draft, or deselecting). The mobile focus
+    // Empty space → dismiss the popover (cancelling a draft, or deselecting). The touch short bottom
     // sheet keeps its explicit close button, so tapping the doc there doesn't close it.
-    if (!isMobile) {
+    if (focusMode === 'popover') {
       if (draft) cancelDraft()
       else deactivate()
     }
-  }, [docRef, activate, deactivate, draft, cancelDraft, isMobile])
+  }, [docRef, activate, deactivate, draft, cancelDraft, focusMode])
 
   const onSelectionComment = useCallback(() => {
     if (!selection || !docRef.current) return
@@ -514,12 +520,13 @@ export function useAnnotationEngine({
       submitSuggestion,
       placements,
       busy,
+      listMode,
     }),
     [
       docId, projectId, content, threads, messagesByThread, suggestions, messagesBySuggestion,
       actions, uid, canEdit, canComment, activeKey, activate, deactivate, sidebarOpen,
       closeSidebar, floatingTop, anchorRef, boundaryEl, docEl, pendingCount, draft, startDraft, cancelDraft,
-      submitComment, submitSuggestion, placements, busy,
+      submitComment, submitSuggestion, placements, busy, listMode,
     ],
   )
 
@@ -533,8 +540,10 @@ export function useAnnotationEngine({
           onSuggest={onSelectionSuggest}
         />
       )}
-      {!isMobile && !sidebarOpen && <AnnotationFloatingPanel />}
-      {isMobile && activeKey && !sidebarOpen && <AnnotationFocusSheet onHeightChange={setFocusSheetHeight} />}
+      {focusMode === 'popover' && !sidebarOpen && <AnnotationFloatingPanel />}
+      {focusMode === 'sheet' && activeKey && !sidebarOpen && (
+        <AnnotationFocusSheet onHeightChange={setFocusSheetHeight} />
+      )}
       <AnnotationSidebar />
     </>
   )
@@ -546,7 +555,8 @@ export function useAnnotationEngine({
     marginGroups,
     suggestionDiffs,
     activate,
-    isMobile,
+    focusMode,
+    listMode,
     focusSheetHeight,
     activeKey,
     pendingCount,

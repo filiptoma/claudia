@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 import type { RefObject } from 'react'
 import type { CommentMessage, CommentThread, SuggestionMessage, SuggestionThread } from '../lib/types'
 import type { AnnotationActions } from '../hooks/useAnnotations'
+import type { ListMode } from '../hooks/useAnnotationLayout'
 import type { Capture } from '../lib/anchor'
 
 export const DRAFT_KEY = '__draft__'
@@ -74,6 +75,10 @@ export interface AnnotationContextValue {
   placements: Record<string, number | null>
 
   busy: boolean
+
+  // resolved responsive layout for the list (see useAnnotationLayout): right-rail sidebar, or a
+  // full-height bottom sheet on mobile / portrait-tablet widths.
+  listMode: ListMode
 }
 
 const AnnotationContext = createContext<AnnotationContextValue | null>(null)

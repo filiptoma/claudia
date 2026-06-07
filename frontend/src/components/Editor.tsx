@@ -696,61 +696,54 @@ export default function Editor({
   const handleCreateEditor = useCallback((view: EditorView) => setScroller(view.scrollDOM), [])
 
   // Split mode: anchor the source and preview panes so they scroll together (proportional mapping).
-  // Touch fix: on touch devices, momentum scroll events keep firing for ~1 s after the finger lifts.
-  // Without a prolonged lock the destination panel's momentum events would re-activate as the source
-  // and fight the original gesture. We lock the touched panel for an extra window after touchend.
+  //
+  // The hard part is touch: writing `dst.scrollTop` fires a `scroll` event on the destination, and on
+  // iOS/iPadOS momentum keeps firing scroll events for ~1 s after the finger lifts. If those echoes are
+  // allowed to drive back, the two panes fight and rounding error walks the position to the top,
+  // unstoppably. Fix: a per-pane suppression window. Whenever we programmatically write a pane we mute
+  // its scroll handler briefly; the driving pane keeps refreshing that window, so every echo (and the
+  // follower's own momentum) is ignored until the gesture goes quiet. A finger landing on a pane makes
+  // it the driver at once and mutes the other so leftover momentum can't hijack the sync. Unlike a
+  // lock cleared on rAF, this is timing-independent — it never relies on the echo beating a frame.
   useEffect(() => {
     const left = scroller
     const right = previewRef.current
     if (!showPreview || !left || !right) return
-    let active: HTMLElement | null = null
-    let raf = 0
-    let touchTimer = 0
-    const sync = (src: HTMLElement, dst: HTMLElement) => {
+    // performance.now() timestamps up to which each pane's scroll events are treated as echoes to ignore.
+    const muteUntil = { left: 0, right: 0 }
+    const SUPPRESS_MS = 150
+    const sync = (src: HTMLElement, dst: HTMLElement, dstKey: 'left' | 'right') => {
       const sMax = src.scrollHeight - src.clientHeight
       const dMax = dst.scrollHeight - dst.clientHeight
       if (sMax <= 0 || dMax <= 0) return
-      dst.scrollTop = (src.scrollTop / sMax) * dMax
-    }
-    const release = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => { active = null })
-    }
-    // After touchend hold the lock for a full second to absorb the momentum scroll phase.
-    const releaseTouchDelay = () => {
-      clearTimeout(touchTimer)
-      touchTimer = window.setTimeout(() => { active = null }, 1000)
+      const target = (src.scrollTop / sMax) * dMax
+      // Skip no-op writes: writing fires no scroll event, so arming a mute window here would only swallow
+      // the follower's next genuine user scroll.
+      if (Math.abs(dst.scrollTop - target) <= 0.5) return
+      muteUntil[dstKey] = performance.now() + SUPPRESS_MS
+      dst.scrollTop = target
     }
     const onLeft = () => {
-      if (active === right) return
-      active = left
-      sync(left, right)
-      release()
+      if (performance.now() < muteUntil.left) return
+      sync(left, right, 'right')
     }
     const onRight = () => {
-      if (active === left) return
-      active = right
-      sync(right, left)
-      release()
+      if (performance.now() < muteUntil.right) return
+      sync(right, left, 'left')
     }
-    // Lock whichever panel the finger lands on so only that panel drives the sync during the gesture.
-    const onLeftTouch = () => { clearTimeout(touchTimer); active = left }
-    const onRightTouch = () => { clearTimeout(touchTimer); active = right }
+    // A finger on a pane is the user's intent to drive it: clear its own mute and mute the other so the
+    // other's lingering momentum can't fight the new gesture.
+    const onLeftTouch = () => { muteUntil.left = 0; muteUntil.right = performance.now() + SUPPRESS_MS }
+    const onRightTouch = () => { muteUntil.right = 0; muteUntil.left = performance.now() + SUPPRESS_MS }
     left.addEventListener('scroll', onLeft, { passive: true })
     right.addEventListener('scroll', onRight, { passive: true })
     left.addEventListener('touchstart', onLeftTouch, { passive: true })
     right.addEventListener('touchstart', onRightTouch, { passive: true })
-    left.addEventListener('touchend', releaseTouchDelay, { passive: true })
-    right.addEventListener('touchend', releaseTouchDelay, { passive: true })
     return () => {
       left.removeEventListener('scroll', onLeft)
       right.removeEventListener('scroll', onRight)
       left.removeEventListener('touchstart', onLeftTouch)
       right.removeEventListener('touchstart', onRightTouch)
-      left.removeEventListener('touchend', releaseTouchDelay)
-      right.removeEventListener('touchend', releaseTouchDelay)
-      cancelAnimationFrame(raf)
-      clearTimeout(touchTimer)
     }
   }, [showPreview, scroller])
 
@@ -938,7 +931,8 @@ export default function Editor({
 
 // The split editor's right preview pane, wrapped with the annotations engine so a reviewer can
 // highlight rendered text to comment/suggest, see existing highlights, and open the sidebar from the
-// toolbar — the same UX as read mode. Desktop only (split mode is unavailable on mobile).
+// toolbar — the same UX as read mode (split mode is unavailable on phones, but reachable on tablets,
+// where the annotation UI resolves to the touch combination: short bottom sheet + sidebar).
 function EditorPreview({
   scrollRef,
   docId,
@@ -969,11 +963,23 @@ function EditorPreview({
     floatingTop: SPLIT_FLOATING_TOP,
   })
 
+  // On touch the focus UI is the short bottom sheet (vs the popover); pad the pane so its content can
+  // scroll clear of it, mirroring read mode.
+  const docPaddingBottom =
+    eng.focusMode === 'sheet' && eng.activeKey && eng.focusSheetHeight > 0
+      ? `${eng.focusSheetHeight + 24}px`
+      : undefined
+
   return (
     <AnnotationContext.Provider value={eng.ctx}>
       <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto">
         <AnnotationToolbar count={eng.pendingCount} onOpenSidebar={() => eng.ctx.setSidebarOpen(true)} />
-        <div ref={docRef} onClick={eng.onDocClick} className="px-7 pt-4 pb-20">
+        <div
+          ref={docRef}
+          onClick={eng.onDocClick}
+          className="px-7 pt-4 pb-20"
+          style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
+        >
           <Markdown
             images={images}
             annotate
@@ -1005,7 +1011,7 @@ function SuggestionPanelBody({
   onCancel: () => void
 }) {
   return (
-    <div className="overflow-y-auto p-3 max-h-[50vh]">
+    <div className="overflow-y-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-h-[50vh]">
       <SuggestionComposer
         projectId={projectId}
         originalMd={pendingEdit.originalMd}

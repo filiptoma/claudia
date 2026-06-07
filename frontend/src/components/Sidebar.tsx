@@ -372,7 +372,7 @@ export default function Sidebar({
     >
       {/* Inner content stays put and only fades (no translate) as the aside collapses its width. The
           quicker opacity fade masks the width-clip so it reads as a clean fade-out, not a shift. */}
-      <div className="flex h-full w-80 md:w-68 xl:w-80 flex-col">
+      <div className="flex h-full w-80 md:w-68 xl:w-80 flex-col max-md:pt-[env(safe-area-inset-top)]">
         <nav className="flex-1 overflow-y-auto px-2 py-3">
           {proj ? (
             <>
