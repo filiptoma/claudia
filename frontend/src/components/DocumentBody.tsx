@@ -6,7 +6,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 import { useAnnotationActions } from '../hooks/useAnnotations'
 import QuerySuspense from './QuerySuspense'
 import AnnotationLayer from './annotations/AnnotationLayer'
-import type { Mode } from './ModeSwitch'
+import { availableModesFor, resolveMode } from '../lib/docMode'
 
 // The editor pulls in CodeMirror + every language grammar, so it's only loaded when the user
 // actually enters edit/split mode — keeping the initial (read-only) bundle lean.
@@ -32,21 +32,10 @@ export default function DocumentBody({
   // True for users who can comment/suggest but cannot directly edit the document.
   const isCommenterOnly = canComment && !canEdit
 
-  // Desktop defaults to split. Mobile: quick notes default to edit (they're for quick capture),
-  // regular docs default to view. An explicit ?mode= URL param always wins on mobile.
-  // Commenter-only users suggest edits via split on desktop; split is unavailable on mobile, so they
-  // suggest via edit mode there (the editor runs in suggestion mode either way). Both default to view.
-  const urlMode = searchParams.get('mode') as Mode | null
-  const mobileDefault: Mode = meta.is_quick_note ? 'edit' : 'view'
-  const mode: Mode = isCommenterOnly
-    ? isMobile
-      ? (urlMode === 'edit' ? 'edit' : 'view')
-      : (urlMode === 'split' ? 'split' : 'view')
-    : !canEdit
-    ? 'view'
-    : isMobile
-    ? (urlMode === 'view' ? 'view' : urlMode === 'edit' ? 'edit' : mobileDefault)
-    : (urlMode ?? 'split')
+  // The mode is read straight from the URL's ?mode= (the single source of truth shared with the
+  // header's ModeSwitch via docMode.ts), clamped to what this user/device allows and defaulting to
+  // "view" when the param is absent. So a bare document link always opens in view.
+  const mode = resolveMode(searchParams.get('mode'), availableModesFor(canEdit, canComment, isMobile))
   const isEdit = mode !== 'view'
 
   return (

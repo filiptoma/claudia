@@ -64,6 +64,7 @@ import astroLogoBlack from "../assets/astro-black.svg";
 import astroLogoWhite from "../assets/astro-white.svg";
 import ModeSwitch from "./ModeSwitch";
 import type { Mode } from "./ModeSwitch";
+import { availableModesFor, resolveMode } from "../lib/docMode";
 import SaveIndicator from "./SaveIndicator";
 import ProfileAvatar from "./ProfileAvatar";
 import {
@@ -132,11 +133,10 @@ export default function AppHeader() {
       />
     ) : null;
 
-  // Desktop defaults to split; mobile mirrors DocumentBody: view for regular docs, edit for quick
-  // notes. An explicit ?mode= param always wins. We write it back on change so the selection sticks.
-  const urlMode = searchParams.get("mode") as Mode | null;
-  const mobileModeDefault: Mode = doc?.is_quick_note ? "edit" : "view";
-  const mode: Mode = urlMode ?? (isMobile ? mobileModeDefault : "split");
+  // The URL's ?mode= is the single source of truth; the resolved mode (defaulting to "view") is
+  // computed per-branch from what the user can do — see resolveMode/availableModesFor. setMode writes
+  // it back so the selection sticks.
+  const urlMode = searchParams.get("mode");
   const setMode = (m: Mode) => {
     setSearchParams(
       (prev) => {
@@ -210,13 +210,16 @@ export default function AppHeader() {
           },
         },
       ];
+      // Quick notes live in the owner-only workspace, so the viewer is always an editor.
+      const noteModes = availableModesFor(true, false, isMobile);
+      const noteMode = resolveMode(urlMode, noteModes);
       return (
         <HeaderShell
           items={items}
           actions={
             <>
               <SaveIndicator />
-              <ModeSwitch mode={mode} onChange={setMode} />
+              <ModeSwitch mode={noteMode} onChange={setMode} availableModes={noteModes} />
               <ActionsMenu alwaysVisible label="Note actions" actions={menu} />
             </>
           }
@@ -313,6 +316,9 @@ export default function AppHeader() {
     // caps), so a doc the owner locked to "view only" hides edit/comment affordances from everyone else.
     const docCanEdit = canEditDocument(project, doc, folder, role, uid, myMemberRole);
     const docCanComment = canCommentDocument(project, doc, folder, role, uid, myMemberRole);
+    // Mode comes straight from the URL (default "view"), clamped to what this user/device allows.
+    const docModes = availableModesFor(docCanEdit, docCanComment, isMobile);
+    const docMode = resolveMode(urlMode, docModes);
     const items: Crumb[] = [projectCrumb];
     if (folder)
       items.push({
@@ -380,7 +386,7 @@ export default function AppHeader() {
                 <>
                   <SaveIndicator />
                   {ownerAvatar}
-                  <ModeSwitch mode={mode} onChange={setMode} />
+                  <ModeSwitch mode={docMode} onChange={setMode} availableModes={docModes} />
                   <ActionsMenu
                     alwaysVisible
                     label="Document actions"
@@ -391,13 +397,7 @@ export default function AppHeader() {
               {!docCanEdit && docCanComment && (
                 // Commenters suggest edits via split (desktop) or, since split is unavailable on
                 // mobile, via edit mode (suggestion mode) on mobile.
-                <ModeSwitch
-                  mode={mode}
-                  onChange={setMode}
-                  availableModes={
-                    isMobile ? ["view", "edit"] : ["view", "split"]
-                  }
-                />
+                <ModeSwitch mode={docMode} onChange={setMode} availableModes={docModes} />
               )}
               {!docCanEdit && ownerAvatar}
             </>
