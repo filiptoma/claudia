@@ -1140,8 +1140,8 @@ function EditorPreview({
             className={cn(
               "w-full pt-4 pb-20 transition-[width,max-width,padding] duration-200",
               eng.ctx.sidebarOpen
-                ? "px-7 md:max-w-none"
-                : "px-7 md:mx-auto md:w-5/6 md:max-w-4xl",
+                ? "px-5 xl:px-7 md:max-w-none"
+                : "xl:px-7 md:mx-auto md:w-5/6 md:max-w-4xl",
             )}
             style={
               docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined
