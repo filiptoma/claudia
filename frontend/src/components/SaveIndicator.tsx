@@ -39,7 +39,7 @@ export default function SaveIndicator() {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex items-center gap-0.5 text-xs whitespace-nowrap text-emerald-600 dark:text-emerald-400">
+          <span className="inline-flex items-center gap-0.5 text-xs whitespace-nowrap text-emerald-600 dark:text-emerald-400 cursor-default">
             <Check className="size-3.5" />
             <span className="max-md:hidden">Saved</span>
           </span>
