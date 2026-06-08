@@ -18,14 +18,15 @@
 //   Credentials come from the environment, so they never land in your shell history. Optional env:
 //   R2_ACCOUNT_ID (default below), BUSYTEX_BUCKET (default "claudia-busytex").
 //
-// Re-run `npm run fetch:tex-assets` then `npm run upload:tex-assets` to push an engine upgrade
-// (overwrites existing objects).
+// Resumable + idempotent: files already in the bucket at the same size are skipped, and each upload
+// retries on transient failures — so just re-run `npm run upload:tex-assets` if it dies partway. To
+// push an engine upgrade, `npm run fetch:tex-assets` first (changed files differ in size → re-sent).
 
 import { readdir, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { S3Client } from '@aws-sdk/client-s3'
+import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 
 const ACCOUNT_ID = process.env.R2_ACCOUNT_ID ?? 'bd6590513616e241374222a01e93b3e6'
@@ -51,7 +52,44 @@ const s3 = new S3Client({
   region: 'auto',
   endpoint: `https://${ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: { accessKeyId: ACCESS_KEY_ID, secretAccessKey: SECRET_ACCESS_KEY },
+  maxAttempts: 5, // SDK-level retries for the usual transient blips
 })
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Already in the bucket at the same size? Skip — makes the run resumable after a mid-upload failure
+// (e.g. a transient TLS "bad record mac" on the big multipart file) without re-pushing what's done.
+async function alreadyUploaded(key, size) {
+  try {
+    const head = await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }))
+    return head.ContentLength === size
+  } catch {
+    return false // not found (404) or any head error → (re)upload
+  }
+}
+
+// A fresh stream + fresh multipart per attempt (a consumed stream can't be replayed). Whole-upload
+// retries on top of the SDK's per-request retries catch connection-level failures the SDK gives up on.
+async function uploadWithRetry(name, path, attempts = 5) {
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const upload = new Upload({
+        client: s3,
+        params: { Bucket: BUCKET, Key: name, Body: createReadStream(path), ContentType: contentType(name) },
+        partSize: 64 * 1024 * 1024, // smaller parts → cheaper to retry a failed chunk
+        queueSize: 2, // fewer concurrent TLS streams → far more reliable on flaky links
+        leavePartsOnError: false, // abort the multipart on failure so no orphan parts accrue
+      })
+      await upload.done()
+      return
+    } catch (err) {
+      if (i === attempts) throw err
+      const code = err?.code ?? err?.name ?? 'error'
+      process.stdout.write(`(${code}; retry ${i}/${attempts - 1}) `)
+      await sleep(2000 * i)
+    }
+  }
+}
 
 const files = (await readdir(ASSET_DIR, { withFileTypes: true }))
   .filter((d) => d.isFile())
@@ -65,22 +103,23 @@ if (files.length === 0) {
 
 console.log(`Uploading ${files.length} file(s) → r2://${BUCKET} (${ACCOUNT_ID})\n`)
 
+let uploaded = 0
+let skipped = 0
 for (const name of files) {
   const path = join(ASSET_DIR, name)
   const { size } = await stat(path)
   const mib = (size / 1048576).toFixed(1)
   process.stdout.write(`→ ${name.padEnd(38)} ${mib.padStart(8)} MiB  `)
 
-  const upload = new Upload({
-    client: s3,
-    params: { Bucket: BUCKET, Key: name, Body: createReadStream(path), ContentType: contentType(name) },
-    partSize: 100 * 1024 * 1024, // 100 MiB parts → multipart kicks in automatically past that
-    queueSize: 4,
-    leavePartsOnError: false,
-  })
-  await upload.done()
+  if (await alreadyUploaded(name, size)) {
+    console.log('· already up-to-date, skipped')
+    skipped++
+    continue
+  }
+  await uploadWithRetry(name, path)
   console.log('✓')
+  uploaded++
 }
 
-console.log(`\nDone. All ${files.length} object(s) uploaded. Verify in the dashboard or with:`)
+console.log(`\nDone. ${uploaded} uploaded, ${skipped} already present. Verify in the dashboard or with:`)
 console.log(`  npx wrangler r2 object get ${BUCKET}/texlive-extra.data --file /tmp/check.data --remote && ls -lh /tmp/check.data`)
