@@ -21,12 +21,12 @@ export default function ProjectTypeBadge({
       className={cn(
         "px-1.5 py-0 font-mono text-[0.65rem] leading-5",
         isLatex
-          ? "border-cyan-400/60 bg-cyan-100 text-cyan-800 dark:border-cyan-300/50 dark:bg-cyan-300/15 dark:text-cyan-300"
+          ? "border-violet-400/60 bg-violet-100 text-violet-800 dark:border-violet-400/50 dark:bg-violet-400/15 dark:text-violet-400"
           : "border-lime-400/60 bg-lime-100 text-lime-800 dark:border-lime-300/50 dark:bg-lime-300/15 dark:text-lime-300",
         className,
       )}
     >
-      {isLatex ? ".tex" : ".md"}
+      <span className="font-extrabold text-xs">{isLatex ? ".tex" : ".md"}</span>
     </Badge>
   );
 }

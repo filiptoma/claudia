@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FilePlus, FolderPlus, Lock, Pencil, StickyNote, Trash2 } from 'lucide-react'
+import { warmLatexEngine } from '../lib/latex/compiler'
 import ViewAllCard from './ViewAllCard'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
@@ -61,6 +62,12 @@ export default function ProjectHome() {
   const actions = useTreeActions()
   const navigate = useNavigate()
   const permissions = usePermissionsDialog()
+
+  // Warm the LaTeX engine the moment a LaTeX project is opened, so its expensive WASM + TeX Live boot
+  // overlaps with browsing the file tree instead of blocking the first compile when a document opens.
+  useEffect(() => {
+    if (project?.type === 'latex') warmLatexEngine()
+  }, [project?.id, project?.type])
 
   // Tab title: documents are handled by DocPage. A folder page reuses its project's title (folder
   // names aren't worth surfacing in the tab), so this resolves to the workspace ("My"), a regular

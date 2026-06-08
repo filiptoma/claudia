@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { compileLatex, type ParsedError } from '../lib/latex/compiler'
+import { compileLatex, warmLatexEngine, type ParsedError } from '../lib/latex/compiler'
 import { buildProjectVirtualFiles } from '../lib/latex/vfs'
+import { loadPdf, savePdf } from '../lib/latex/pdfCache'
 import { downloadFile, exportFilename } from '../lib/typst/export'
 import type { CompileStatus } from '../components/latex/LatexToolbar'
 import type { Project } from '../lib/types'
@@ -96,13 +97,20 @@ export function useLatexCompile(
           setState((s) => ({ ...s, status: 'compiling' }))
           const { id, main_document_id } = projectRef.current
           try {
+            // Boot the engine (idempotent) concurrently with fetching the project files, so these two
+            // slow steps overlap instead of running back-to-back.
+            warmLatexEngine()
             const { files, mainPath } = await buildProjectVirtualFiles({
               projectId: id,
               mainDocId: main_document_id,
               override: overrideRef.current?.() ?? null,
             })
             const result = await compileLatex(files, mainPath, { draft: useDraft })
-            if (result.pdf) pdfRef.current = result.pdf // retain the last good PDF for download + preview
+            if (result.pdf) {
+              pdfRef.current = result.pdf // retain the last good PDF for download + preview
+              // Persist it so reopening/reloading the project shows it instantly (Overleaf-style).
+              void savePdf(id, result.pdf, { draft: useDraft, compiledAt: Date.now() })
+            }
             setState((prev) => ({
               status: result.success ? 'success' : 'error',
               pdf: result.pdf ?? prev.pdf, // keep the last good PDF visible when a run produces none
@@ -140,6 +148,25 @@ export function useLatexCompile(
   useEffect(() => {
     return () => {
       pdfRef.current = null
+    }
+  }, [project.id])
+
+  // On open, restore the last compiled PDF from the cross-session cache so the preview shows instantly
+  // (with a "recompiling" veil) instead of a blank wait while the engine cold-boots and recompiles. Only
+  // seeds when a fresh compile hasn't already produced a PDF — the parallel compile wins once it lands.
+  useEffect(() => {
+    let active = true
+    void loadPdf(project.id).then((cached) => {
+      if (!active || !cached) return
+      pdfRef.current ??= cached.pdf
+      setState((prev) =>
+        prev.pdf
+          ? prev
+          : { ...prev, pdf: cached.pdf, draft: cached.draft, compiledAt: new Date(cached.compiledAt) },
+      )
+    })
+    return () => {
+      active = false
     }
   }, [project.id])
 

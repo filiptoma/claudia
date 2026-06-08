@@ -4,7 +4,26 @@ import type { User } from '@supabase/supabase-js'
 import { setAccessToken, supabase } from '../lib/supabase'
 import { queryClient } from '../lib/queryClient'
 import { isStaffRole } from '../lib/access'
+import { clearPdfCache } from '../lib/latex/pdfCache'
 import type { Profile, Role } from '../lib/types'
+
+// Wipe browser-stored data tied to the signed-in user on logout, so nothing personal lingers on a shared
+// device. Supabase's own session token is removed by signOut(); this clears the compiled-PDF cache and
+// sweeps any stray Supabase auth keys from local/session storage. Device-level prefs that aren't tied to
+// the user (e.g. the saved theme) are deliberately preserved. The engine ASSET cache is also kept — it's
+// public, non-personal, and expensive to re-download.
+async function clearUserData(): Promise<void> {
+  await clearPdfCache()
+  for (const store of [localStorage, sessionStorage]) {
+    try {
+      for (const key of Object.keys(store)) {
+        if (key.startsWith('sb-')) store.removeItem(key)
+      }
+    } catch {
+      // storage may be unavailable (private mode, etc.) — ignore.
+    }
+  }
+}
 
 interface AuthCtx {
   user: Profile | null
@@ -110,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async logout() {
         await supabase.auth.signOut()
+        await clearUserData()
       },
       async refreshProfile() {
         if (!uid) return

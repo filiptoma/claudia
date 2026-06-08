@@ -30,3 +30,11 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
+
+// Persistently cache the LaTeX engine assets (Cache Storage) so they survive hard/dev reloads, not just
+// the HTTP cache. Scoped to /assets/busytex/* only; non-fatal if it fails (the engine still loads).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}busytex-sw.js`).catch(() => {})
+  })
+}

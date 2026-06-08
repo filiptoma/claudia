@@ -112,8 +112,22 @@ const DRIVER = 'xetex_bibtex8_dvipdfmx' as const
 type EngineRunner = InstanceType<typeof import('texlyre-busytex').BusyTexRunner>
 
 // One worker, reused across compiles (init is expensive: it fetches+instantiates the WASM and the
-// preloaded data packages). Cached as a promise so concurrent first-callers share a single init.
-let runnerPromise: Promise<EngineRunner> | null = null
+// preloaded data packages). Cached as a promise so concurrent first-callers share a single init. In dev
+// the promise is stashed on import.meta.hot.data so a Vite hot-update doesn't throw away the warmed
+// worker and force a ~7s re-boot on the next compile (no effect in prod — import.meta.hot is undefined).
+const hotData = import.meta.hot?.data as { runner?: Promise<EngineRunner> | null } | undefined
+let runnerPromise: Promise<EngineRunner> | null = hotData?.runner ?? null
+import.meta.hot?.dispose((data: { runner?: Promise<EngineRunner> | null }) => {
+  data.runner = runnerPromise
+})
+
+/** Kick off engine initialization without waiting for it. Idempotent (getRunner caches the promise), so
+ *  it's safe to call repeatedly — call it as soon as a LaTeX project is opened so the expensive WASM +
+ *  TeX Live boot overlaps with the user browsing/typing instead of blocking their first compile. A failed
+ *  warm-up is silently ignored; the real compile retries and surfaces the error. */
+export function warmLatexEngine(): void {
+  void getRunner().catch(() => {})
+}
 
 async function getRunner(): Promise<EngineRunner> {
   if (!runnerPromise) {

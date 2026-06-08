@@ -124,7 +124,6 @@ const SourceEditor = memo(function SourceEditor({
   theme,
   extensions,
   onChange,
-  onCreateEditor,
 }: {
   cmRef: RefObject<ReactCodeMirrorRef | null>
   value: string
