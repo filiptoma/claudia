@@ -98,9 +98,9 @@ export default function AnnotationToolbar({
   content: string
   /** Show the comments/suggestions sidebar button. Hidden for plain viewers with nothing to read. */
   showComments?: boolean
-  /** Sticky-inside-its-scroller + auto-hide-on-scroll-down (read mode). The split editor sets this
-   *  false: there it's a fixed bar OUTSIDE the scroll area, always visible, mirroring the editor's
-   *  formatting toolbar (and making both panes' scroll viewports the same height). */
+  /** When true: sticky-inside-its-scroller + auto-hide-on-scroll-down. When false (split editor and read
+   *  mode): a fixed bar OUTSIDE the scroll area, always visible, mirroring the editor's formatting
+   *  toolbar (and making the scroll viewport start below it). */
   autoHide?: boolean
   className?: string
 }) {

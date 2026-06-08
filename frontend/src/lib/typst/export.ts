@@ -151,22 +151,22 @@ function wrapStandaloneHtml(title: string, body: string): string {
 ${katexCss}
 :root { color-scheme: light; }
 body { margin: 0; background: #fff; color: ${c.foreground}; }
-.md { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; font-family: "Hanken Grotesk", system-ui, sans-serif; font-size: 1.02rem; line-height: 1.7; word-wrap: break-word; }
+.md { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; font-family: "Hanken Grotesk", system-ui, sans-serif; font-size: 1.08rem; line-height: 1.7; word-wrap: break-word; }
 .md > :first-child { margin-top: 0; }
 .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { margin: 2.2rem 0 0.7rem; line-height: 1.3; letter-spacing: -0.02em; font-weight: 750; }
-.md h1 { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.025em; margin-bottom: 2rem; }
-.md h2 { font-size: 1.6rem; padding-bottom: 0.25em; border-bottom: 1px solid ${c.border}; margin-bottom: 1.5rem; }
-.md h3 { font-size: 1.32rem; } .md h4 { font-size: 1.12rem; }
-.md h5, .md h6 { font-size: 1rem; font-weight: 700; color: ${c.muted}; }
+.md h1 { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.025em; margin-bottom: 2rem; }
+.md h2 { font-size: 1.8rem; padding-bottom: 0.25em; border-bottom: 1px solid ${c.border}; margin-bottom: 1.5rem; }
+.md h3 { font-size: 1.37rem; } .md h4 { font-size: 1.17rem; }
+.md h5, .md h6 { font-size: 1.05rem; font-weight: 700; color: ${c.muted}; }
 .md p, .md ul, .md ol, .md blockquote, .md pre, .md table { margin: 0 0 1.28rem; }
 .md ul, .md ol { padding-left: 1.6em; } .md ul { list-style: disc; } .md ol { list-style: decimal; }
 .md a { color: ${c.link}; text-decoration: none; font-weight: 500; } .md a:hover { text-decoration: underline; }
-.md strong { font-weight: 800; } .md em { font-style: italic; }
+.md strong { font-weight: 900; } .md em { font-style: italic; }
 .md :not(pre) > code { font-family: "JetBrains Mono", monospace; font-size: 0.86em; color: ${c.code}; background: ${c.codeChip}; padding: 0.15em 0.4em; border-radius: 5px; }
 .md pre { padding: 14px 16px; border-radius: 8px; overflow-x: auto; border: 1px solid ${c.border}; background: ${c.surface}; }
-.md pre code { font-family: "JetBrains Mono", monospace; font-size: 0.86rem; line-height: 1.6; }
+.md pre code { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; line-height: 1.6; }
 .md blockquote { padding: 0.6em 1em; border-left: 3px solid ${c.primary}; background: ${c.quote}; border-radius: 0 8px 8px 0; }
-.md table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+.md table { border-collapse: collapse; width: 100%; font-size: 0.97rem; }
 .md th, .md td { border: 1px solid ${c.border}; padding: 8px 12px; text-align: left; }
 .md thead th { background: ${c.surface}; font-weight: 650; }
 .md tbody tr:nth-child(even) { background: ${c.zebra}; }

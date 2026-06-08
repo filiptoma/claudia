@@ -35,7 +35,7 @@ export function buildTypstDocument(body: string, opts: { title?: string } = {}):
   const c = TYPST_COLORS
   const titleMeta = opts.title ? `#set document(title: ${typstString(opts.title)})\n` : ''
   return `${titleMeta}#set page(paper: "a4", margin: (x: 2.2cm, top: 2.2cm, bottom: 2.4cm))
-#set text(font: ("Hanken Grotesk",), size: 11pt, fill: rgb("${c.foreground}"), lang: "en")
+#set text(font: ("Hanken Grotesk",), size: 11.6pt, fill: rgb("${c.foreground}"), lang: "en")
 // leading 1em ⇒ ~1.7em line pitch (matches .md line-height: 1.7); spacing 2.2em is the inter-block
 // gap — in Typst a block gap *replaces* the inter-line leading, so it must equal one line (1.7em) plus
 // the .md 1.28rem block margin to reproduce the on-screen baseline-to-baseline (see index.css:251-253).
@@ -47,17 +47,17 @@ export function buildTypstDocument(body: string, opts: { title?: string } = {}):
 // because their shorter ascenders contribute less of the visible gap than a big H1's do, so a flat
 // value would leave them looking cramped; the bottoms all clamp to the 2.2em block spacing anyway.
 #show heading: set text(fill: rgb("${c.foreground}"))
-#show heading.where(level: 1): it => block(above: 2.2em, below: 2.2em, text(size: 23pt, weight: 800, it.body))
-#show heading.where(level: 2): it => block(width: 100%, above: 2.55em, below: 2.2em, stroke: (bottom: 0.6pt + rgb("${c.border}")), inset: (bottom: 0.32em), text(size: 16.5pt, weight: 750, it.body))
-#show heading.where(level: 3): it => block(above: 3em, below: 2.2em, text(size: 14pt, weight: 750, it.body))
-#show heading.where(level: 4): it => block(above: 3em, below: 2.2em, text(size: 12pt, weight: 750, it.body))
-#show heading.where(level: 5): it => block(above: 3em, below: 2.2em, text(size: 11pt, weight: 700, fill: rgb("${c.muted}"), it.body))
-#show heading.where(level: 6): it => block(above: 3em, below: 2.2em, text(size: 11pt, weight: 700, fill: rgb("${c.muted}"), it.body))
+#show heading.where(level: 1): it => block(above: 2.2em, below: 2.2em, text(size: 25pt, weight: 800, it.body))
+#show heading.where(level: 2): it => block(width: 100%, above: 2.55em, below: 2.2em, stroke: (bottom: 0.6pt + rgb("${c.border}")), inset: (bottom: 0.32em), text(size: 18.5pt, weight: 750, it.body))
+#show heading.where(level: 3): it => block(above: 3em, below: 2.2em, text(size: 14.5pt, weight: 750, it.body))
+#show heading.where(level: 4): it => block(above: 3em, below: 2.2em, text(size: 12.5pt, weight: 750, it.body))
+#show heading.where(level: 5): it => block(above: 3em, below: 2.2em, text(size: 11.5pt, weight: 700, fill: rgb("${c.muted}"), it.body))
+#show heading.where(level: 6): it => block(above: 3em, below: 2.2em, text(size: 11.5pt, weight: 700, fill: rgb("${c.muted}"), it.body))
 
 // Code — JetBrains Mono; inline on a warm chip, blocks on a bordered surface (auto-highlighted).
 #show raw: set text(font: ("JetBrains Mono",))
 #show raw.where(block: false): it => box(fill: rgb("${c.codeChip}"), inset: (x: 0.35em), outset: (y: 0.28em), radius: 3pt, text(fill: rgb("${c.code}"), size: 0.86em, it))
-#show raw.where(block: true): it => block(width: 100%, above: 2.2em, below: 2.2em, fill: rgb("${c.surface}"), stroke: 0.6pt + rgb("${c.border}"), inset: (x: 1em, y: 0.85em), radius: 5pt, text(size: 9.3pt, it))
+#show raw.where(block: true): it => block(width: 100%, above: 2.2em, below: 2.2em, fill: rgb("${c.surface}"), stroke: 0.6pt + rgb("${c.border}"), inset: (x: 1em, y: 0.85em), radius: 5pt, text(size: 9.7pt, it))
 
 // Lists — item spacing matches the body line pitch (tight .md lists have no per-item margin).
 #set list(marker: ([•], [◦], [▪]), spacing: 1em)

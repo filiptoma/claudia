@@ -8,7 +8,9 @@
    targets all touch devices (Safari, Chrome, Firefox) without relying on WebKit-only
    @supports queries. Pinch-to-zoom remains fully functional. */
 @media (pointer: coarse) {
-  input, textarea, select {
+  input,
+  textarea,
+  select {
     font-size: 16px;
   }
 }
@@ -189,7 +191,9 @@
 
 /* Disable all CSS transitions and animations on mobile — taps should feel instant. */
 @media (max-width: 767px) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     transition: none !important;
     animation: none !important;
   }
@@ -248,7 +252,7 @@
 .md {
   /* --md-gap is the inter-block spacing (paragraphs, lists, headings). Kept loosely in step with the
      source editor's line height so split-mode lines stay roughly aligned, but tuned for readability. */
-  font-size: 1.02rem;
+  font-size: 1.08rem;
   line-height: 1.7;
   --md-gap: 1.28rem;
   color: var(--foreground);
@@ -277,27 +281,27 @@
   scroll-margin-top: 1rem; /* so anchor jumps don't tuck the heading under the top edge */
 }
 .md h1 {
-  font-size: 2.2rem;
+  font-size: 2.4rem;
   font-weight: 800;
   letter-spacing: -0.025em;
   margin-bottom: 2rem;
 }
 .md h2 {
-  font-size: 1.6rem;
+  font-size: 1.8rem;
   padding-bottom: 0.25em;
   border-bottom: 1px solid var(--border);
   margin-bottom: 1.5rem;
 }
 .md h3 {
-  font-size: 1.32rem;
+  font-size: 1.37rem;
   margin-bottom: 1.25rem;
 }
 .md h4 {
-  font-size: 1.12rem;
+  font-size: 1.17rem;
 }
 .md h5,
 .md h6 {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--muted-foreground);
@@ -451,7 +455,7 @@
   padding: 0;
   border-radius: 0;
   font-family: var(--font-mono);
-  font-size: 0.86rem;
+  font-size: 0.9rem;
   line-height: 1.6;
 }
 
@@ -476,7 +480,7 @@
 .md table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.92rem;
+  font-size: 0.97rem;
 }
 .md th,
 .md td {

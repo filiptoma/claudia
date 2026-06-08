@@ -53,32 +53,38 @@ export default function AnnotationLayer({
 
   return (
     <AnnotationContext.Provider value={eng.ctx}>
-      <AnnotationToolbar
-        count={eng.pendingCount}
-        onOpenSidebar={() => eng.ctx.setSidebarOpen(true)}
-        content={content}
-        showComments={showComments}
-      />
+      {/* Toolbar sits OUTSIDE the scroll area (fixed, always visible — mirroring the split editor's
+          preview toolbar), so it never scrolls away. The document scrolls in the inner container below;
+          the annotation engine binds to it via getScrollParent. */}
+      <div className="flex h-full min-h-0 flex-col">
+        <AnnotationToolbar
+          count={eng.pendingCount}
+          onOpenSidebar={() => eng.ctx.setSidebarOpen(true)}
+          content={content}
+          showComments={showComments}
+          autoHide={false}
+        />
 
-      <div className="relative w-full">
-        <div
-          className="mx-auto max-w-205 px-8 pt-7 pb-24 max-md:px-4 max-md:pt-5"
-          style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
-        >
-          <div className="relative overflow-visible">
-            <div ref={docRef} onClick={eng.onDocClick}>
-              <DocView content={content} annotate suggestions={eng.suggestionDiffs} />
+        <div className="relative min-h-0 w-full flex-1 overflow-y-auto">
+          <div
+            className="mx-auto max-w-205 px-8 pt-7 pb-24 max-md:px-4 max-md:pt-5"
+            style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
+          >
+            <div className="relative overflow-visible">
+              <div ref={docRef} onClick={eng.onDocClick}>
+                <DocView content={content} annotate suggestions={eng.suggestionDiffs} />
+              </div>
+
+              {eng.listMode === 'sidebar' &&
+                eng.marginGroups.map((group) => (
+                  <MarginIndicatorGroup
+                    key={group.items.map((i) => i.key).join(',')}
+                    top={group.top}
+                    items={group.items}
+                    onActivate={eng.activate}
+                  />
+                ))}
             </div>
-
-            {eng.listMode === 'sidebar' &&
-              eng.marginGroups.map((group) => (
-                <MarginIndicatorGroup
-                  key={group.items.map((i) => i.key).join(',')}
-                  top={group.top}
-                  items={group.items}
-                  onActivate={eng.activate}
-                />
-              ))}
           </div>
         </div>
       </div>
