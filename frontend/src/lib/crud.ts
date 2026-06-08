@@ -12,9 +12,18 @@ import type {
   MemberRole,
   MentionableUser,
   Project,
+  ProjectType,
   SuggestionMessage,
   SuggestionThread,
 } from './types'
+
+// A minimal, known-good LaTeX document seeded into every new LaTeX project's main.tex, so the user
+// sees a compilable file on first open rather than a blank page.
+const STARTER_MAIN_TEX = `\\documentclass{article}
+\\begin{document}
+Hello, \\LaTeX!
+\\end{document}
+`
 
 type Table = 'projects' | 'folders' | 'documents'
 
@@ -70,10 +79,36 @@ async function insertDocument(fields: Record<string, unknown>): Promise<Document
   }
 }
 
-export async function createProject(name: string, ownerId: string): Promise<Project> {
+export async function createProject(
+  name: string,
+  ownerId: string,
+  type: ProjectType = 'markdown',
+): Promise<Project> {
   const sort_order = await nextOrder('projects')
   // New projects are private (is_public=false, no members) and owned by the creator.
-  return insertWithNanoidSlug<Project>('projects', { name, owner: ownerId, is_public: false, sort_order }, name)
+  return insertWithNanoidSlug<Project>(
+    'projects',
+    { name, owner: ownerId, is_public: false, type, sort_order },
+    name,
+  )
+}
+
+// The compile-root document of a new LaTeX project, seeded with a minimal compilable doc. The caller
+// (newProject) wires it as the project's main_document_id via setMainDocument.
+export async function createMainTexDocument(projectId: string): Promise<DocumentRec> {
+  const sort_order = await nextOrder('documents', { project_id: projectId, folder_id: null })
+  return insertDocument({
+    title: 'main.tex',
+    project_id: projectId,
+    folder_id: null,
+    content: STARTER_MAIN_TEX,
+    sort_order,
+  })
+}
+
+// Point a LaTeX project at its compile root (the main .tex). Also used by a future "Set as main file".
+export async function setMainDocument(projectId: string, documentId: string): Promise<void> {
+  await update('projects', projectId, { main_document_id: documentId })
 }
 
 export async function createFolder(projectId: string, name: string): Promise<Folder> {
@@ -85,12 +120,13 @@ export async function createDocument(
   projectId: string,
   folderId: string | null,
   title: string,
+  projectType: ProjectType = 'markdown',
 ): Promise<DocumentRec> {
   const sort_order = await nextOrder('documents', { project_id: projectId, folder_id: folderId })
-  // Prefill the first line with an H1 of the title as a convenience. This is a one-time seed — the
-  // heading and the document title are NOT kept in sync afterwards. (Quick notes use createQuickNote
-  // and stay empty.)
-  const content = `# ${title.trim()}\n`
+  // Markdown docs prefill an H1 of the title as a one-time convenience (the heading and the title are
+  // NOT kept in sync afterwards). LaTeX files are filenames, not headings, so they seed empty — the
+  // author writes the preamble/body (or \input-s from main.tex). (Quick notes stay empty too.)
+  const content = projectType === 'latex' ? '' : `# ${title.trim()}\n`
   return insertDocument({ title, project_id: projectId, folder_id: folderId, content, sort_order })
 }
 

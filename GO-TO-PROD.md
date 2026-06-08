@@ -25,6 +25,8 @@ Two Supabase projects, one Cloudflare Pages site, free except the domain. The li
 - [ ] **D.** First admin on prod + smoke test.
 - [ ] Confirm `0006` + `0007` are also applied to **prod**, and that Cloudflare's **Production** env
       vars point at the **prod** Supabase (not dev).
+- [ ] **E.** (LaTeX only) Host the LaTeX engine assets — see **[DEPLOY-LATEX.md](DEPLOY-LATEX.md)**.
+      Skip if you haven't enabled the LaTeX project type; markdown needs none of it.
 
 > **Local DB switching** — the loaded env file decides which database you hit:
 > ```
@@ -169,6 +171,17 @@ dev-only content freely afterward — it's replaced on the next run. **Never** r
 4. **Keep-alive:** add repo secrets `PROD_SUPABASE_URL` + `PROD_PUBLISHABLE_KEY` so
    [`.github/workflows/keepalive.yml`](.github/workflows/keepalive.yml) pings prod daily (a free
    project auto-pauses after 7 idle days → the live domain would cold-start for the first visitor).
+
+---
+
+## E. Host the LaTeX engine assets (LaTeX project type only)
+
+The `latex` project type compiles in the browser via a ~480 MB WASM + TeX Live bundle that can't ride
+the Pages build (four files exceed Pages' 25 MiB cap). It's served same-origin from Cloudflare R2 by a
+Pages Function already in the repo. Full runbook: **[DEPLOY-LATEX.md](DEPLOY-LATEX.md)** — create an R2
+bucket, upload `frontend/public/assets/busytex/*`, bind it as `BUSYTEX`, redeploy. No code/env change.
+
+If you're launching markdown-only, skip this; nothing about LaTeX affects the markdown path.
 
 ---
 

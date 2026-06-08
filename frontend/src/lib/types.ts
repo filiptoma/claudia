@@ -1,6 +1,8 @@
 export type Role = 'basic' | 'mod' | 'admin'
 export type MemberRole = 'viewer' | 'commenter' | 'editor'
 export type Visibility = 'private' | 'shared' | 'public'
+/** A project is either a markdown notes project or a LaTeX (Overleaf-style) project. See migration 0021. */
+export type ProjectType = 'markdown' | 'latex'
 
 export interface Profile {
   id: string
@@ -45,6 +47,10 @@ export interface Project {
   slug: string
   owner: string | null
   is_public: boolean
+  /** 'markdown' (the default for every existing project + the workspace) or 'latex'. */
+  type: ProjectType
+  /** LaTeX-only: the compile root (`main.tex`). NULL for markdown projects and freshly-created ones. */
+  main_document_id: string | null
   is_workspace: boolean
   /** Baseline role granted to everyone who can access a PUBLIC project (no invite needed). */
   public_role: MemberRole

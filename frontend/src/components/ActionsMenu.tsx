@@ -29,14 +29,17 @@ export default function ActionsMenu({
   alwaysVisible = false,
   triggerClassName,
   align = 'end',
+  children,
 }: {
   actions: MenuAction[]
   label?: string
   alwaysVisible?: boolean
   triggerClassName?: string
   align?: 'start' | 'center' | 'end'
+  /** Extra menu content rendered after the actions (e.g. an Export section). */
+  children?: ReactNode
 }) {
-  if (actions.length === 0) return null
+  if (actions.length === 0 && !children) return null
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -66,6 +69,7 @@ export default function ActionsMenu({
             {a.label}
           </DropdownMenuItem>,
         ])}
+        {children}
       </DropdownMenuContent>
     </DropdownMenu>
   )

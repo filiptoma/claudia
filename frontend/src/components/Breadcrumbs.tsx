@@ -17,6 +17,8 @@ export interface Crumb {
   label: string
   to?: string
   icon?: ReactNode
+  // Rendered after the label (e.g. a "Beta" badge on a LaTeX project crumb). Non-interactive.
+  accessory?: ReactNode
   editable?: { id: string; value: string; placeholder?: string; onSubmit: (value: string) => void }
 }
 
@@ -129,12 +131,14 @@ export default function Breadcrumbs({ items }: { items: Crumb[] }) {
                   <Link to={c.to} className="flex items-center gap-2 py-2.5">
                     {c.icon && <span className="shrink-0">{c.icon}</span>}
                     <span className="truncate">{label}</span>
+                    {c.accessory}
                   </Link>
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem key={i} disabled className="py-2.5 font-medium opacity-100">
                   {c.icon && <span className="shrink-0">{c.icon}</span>}
                   <span className="truncate">{label}</span>
+                  {c.accessory}
                 </DropdownMenuItem>
               )
             })}
@@ -152,6 +156,7 @@ export default function Breadcrumbs({ items }: { items: Crumb[] }) {
         <span className="flex min-w-0 items-center gap-1.5 truncate font-semibold text-foreground">
           {c.icon && <span className="shrink-0 text-muted-foreground">{c.icon}</span>}
           <span className="truncate">{c.label}</span>
+          {c.accessory}
         </span>
       </nav>
     )
@@ -181,6 +186,7 @@ export default function Breadcrumbs({ items }: { items: Crumb[] }) {
               >
                 {c.icon}
                 <span className="truncate">{c.label}</span>
+                {c.accessory}
               </Link>
             ) : (
               <span
@@ -191,6 +197,7 @@ export default function Breadcrumbs({ items }: { items: Crumb[] }) {
               >
                 {c.icon}
                 <span className="truncate">{c.label}</span>
+                {c.accessory}
               </span>
             )}
           </Fragment>

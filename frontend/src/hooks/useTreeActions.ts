@@ -9,14 +9,16 @@ import { formatDateTime } from '../lib/labels'
 import {
   createDocument,
   createFolder,
+  createMainTexDocument,
   createProject,
   createQuickNote,
   removeRecord,
   renameDocument,
   renameFolder,
   renameProject,
+  setMainDocument,
 } from '../lib/crud'
-import type { DocumentRec, Folder, Project } from '../lib/types'
+import type { DocumentRec, Folder, Project, ProjectType } from '../lib/types'
 
 const fail = (e: unknown) => toast('error', e instanceof Error ? e.message : 'Action failed')
 
@@ -52,19 +54,38 @@ export function useTreeActions() {
     navigate(segs.join('/') + location.search, { replace: true })
   }
 
-  async function newProject(): Promise<Project | null> {
+  // Returns the new project and, for LaTeX projects, its seeded main.tex (so the caller can open it
+  // straight into split mode). Markdown projects return mainDoc=null (caller opens the project root).
+  async function newProject(): Promise<{ project: Project; mainDoc: DocumentRec | null } | null> {
     try {
-      const name = await dialog.prompt({
+      const res = await dialog.promptWithChoice({
         title: 'New project',
         label: 'Project name',
         placeholder: 'e.g. Algorithms',
         confirmText: 'Create',
+        choiceLabel: 'Type',
+        choiceDefault: 'markdown',
+        choices: [
+          { value: 'markdown', label: 'Markdown' },
+          { value: 'latex', label: 'LaTeX' },
+        ],
+        choiceNotices: {
+          latex:
+            'LaTeX projects are a beta feature. Compilation runs in your browser and may be slow on the first load; some packages and edge cases aren’t supported yet.',
+        },
       })
-      if (!name || !uid) return null
-      const project = await createProject(name, uid)
+      if (!res || !uid) return null
+      const { value: name, choice } = res
+      const type = choice as ProjectType
+      const project = await createProject(name, uid, type)
+      let mainDoc: DocumentRec | null = null
+      if (type === 'latex') {
+        mainDoc = await createMainTexDocument(project.id)
+        await setMainDocument(project.id, mainDoc.id)
+      }
       await refresh()
       toast('success', `Project “${project.name}” created`)
-      return project
+      return { project, mainDoc }
     } catch (e) {
       fail(e)
       return null
@@ -168,7 +189,7 @@ export function useTreeActions() {
     try {
       const title = await dialog.prompt({ title: 'New document', label: 'Document title', confirmText: 'Create' })
       if (!title) return null
-      const doc = await createDocument(p.id, folderId, title)
+      const doc = await createDocument(p.id, folderId, title, p.type)
       await refresh()
       toast('success', `Document “${doc.title}” created`)
       return doc

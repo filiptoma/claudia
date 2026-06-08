@@ -7,13 +7,13 @@ import { useTreeActions } from '../hooks/useTreeActions'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { projectVisibility } from '../lib/access'
 import { APP_NAME } from '../lib/brand'
-import { notesPath, noteSplitPath, projectPath, publicProjectsPath } from '../lib/paths'
+import { docSplitPath, notesPath, noteSplitPath, projectPath, publicProjectsPath } from '../lib/paths'
 import { Button } from '@/components/ui/button'
 import { ProjectGlyph, QuickNoteIcon, WorkspaceIcon } from './EntityIcons'
 import type { Project } from '../lib/types'
 
 export default function MobileHome() {
-  const { projects, documents, members, loading } = useTree()
+  const { projects, documents, folders, members, loading } = useTree()
   const { user, uid } = useAuth()
   const actions = useTreeActions()
   const navigate = useNavigate()
@@ -46,8 +46,10 @@ export default function MobileHome() {
   )
 
   const onCreateProject = async () => {
-    const p = await actions.newProject()
-    if (p) navigate(projectPath(p.slug))
+    const r = await actions.newProject()
+    if (!r) return
+    // LaTeX projects open their seeded main.tex straight into edit mode (split degrades to edit on mobile).
+    navigate(r.mainDoc ? docSplitPath(r.project.slug, r.mainDoc, folders) : projectPath(r.project.slug))
   }
 
   if (loading) return <div className="p-6 text-muted-foreground text-sm">Loading…</div>

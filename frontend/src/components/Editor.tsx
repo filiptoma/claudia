@@ -26,6 +26,8 @@ import type { DocMeta } from '../hooks/useTree'
 import { useTheme } from '../context/ThemeContext'
 import { toast } from '../lib/toast'
 import { cn } from '@/lib/utils'
+import { registerLiveDoc } from '../lib/liveDoc'
+import { cmChrome, cmLightContrast } from '../lib/cmTheme'
 import Markdown from './Markdown'
 import EditorToolbar from './EditorToolbar'
 import SlashMenu from './SlashMenu'
@@ -78,28 +80,8 @@ const BASIC_SETUP: BasicSetupOptions = {
 // toolbar (~48px) + the preview pane's annotation toolbar (44px).
 const SPLIT_FLOATING_TOP = 148
 
-// Editor chrome (font, padding, fill height) handled here rather than in CSS. Font size + line height
-// are matched to the rendered markdown (.md) so source and preview lines sit at the same y in split.
-const cmChrome = EditorView.theme({
-  '&': { height: '100%', backgroundColor: 'transparent' },
-  '.cm-scroller': {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.95rem',
-    lineHeight: '1.7',
-  },
-  '.cm-content': { padding: '1rem 1rem 5rem' },
-  '.cm-gutters': { backgroundColor: 'transparent', border: 'none' },
-})
-
-// materialLight is washed-out (light gray text on near-white); darken the body text + caret so the
-// light-mode editor is comfortably readable. Layered on top of materialLight (light mode only).
-const cmLightContrast = EditorView.theme(
-  {
-    '.cm-content': { color: '#1f2937' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#1f2937' },
-  },
-  { dark: false },
-)
+// Editor chrome (cmChrome) + the light-mode contrast layer (cmLightContrast) live in lib/cmTheme so
+// the LaTeX source editor renders identical chrome.
 
 // The slash commands (stage 1). Only "Reference" today, but the menu is built to grow. `keywords`
 // widen what the user can type to match (e.g. `/link`, `/doc`, `/head` all surface Reference).
@@ -195,8 +177,13 @@ export default function Editor({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [toolbarOpen, setToolbarOpen] = useState(!isMobile)
-  // Keep toolbar state in sync when viewport crosses the mobile breakpoint.
-  useEffect(() => { setToolbarOpen(!isMobile) }, [isMobile])
+  // Keep toolbar state in sync when the viewport crosses the mobile breakpoint. Adjusting state during
+  // render (React's recommended alternative to a setState-in-effect) avoids an extra commit.
+  const [wasMobile, setWasMobile] = useState(isMobile)
+  if (wasMobile !== isMobile) {
+    setWasMobile(isMobile)
+    setToolbarOpen(!isMobile)
+  }
 
   // Captured once (state initializer) so CodeMirror's value never resets on cache updates.
   const [initialValue] = useState(doc.content)
@@ -283,6 +270,10 @@ export default function Editor({
     })
     return () => useSaveStatus.getState().reset()
   }, [doSave])
+
+  // Expose the live (possibly-unsaved) source so the app-bar Export menu can read it — `latest` is a
+  // ref, so this getter stays current without re-registering on every keystroke.
+  useEffect(() => registerLiveDoc(doc.id, () => latest.current), [doc.id])
 
   const handleChange = useCallback(
     (val: string) => {
@@ -402,7 +393,7 @@ export default function Editor({
       window.clearTimeout(previewTimer.current)
       if (dirty.current) void doSave()
     }
-  }, [doc.id, doSave])
+  }, [doc.id, doSave, suggestionMode])
 
   const uploadAndInsert = useCallback(
     async (file: File, pos?: number) => {
@@ -775,14 +766,16 @@ export default function Editor({
           <div className="shrink-0 border-b border-border bg-card/40">
             {isMobile ? (
               <>
-                <button
-                  className="flex h-12 w-full items-center justify-between px-4 text-sm font-medium text-muted-foreground active:bg-card/80"
-                  onClick={() => setToolbarOpen((o) => !o)}
-                  aria-label={toolbarOpen ? 'Hide formatting toolbar' : 'Show formatting toolbar'}
-                >
-                  <span>Format</span>
-                  {toolbarOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-                </button>
+                <div className="flex h-12 items-center">
+                  <button
+                    className="flex h-12 items-center gap-2 px-4 text-sm font-medium text-muted-foreground active:bg-card/80"
+                    onClick={() => setToolbarOpen((o) => !o)}
+                    aria-label={toolbarOpen ? 'Hide formatting toolbar' : 'Show formatting toolbar'}
+                  >
+                    <span>Format</span>
+                    {toolbarOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                  </button>
+                </div>
                 {toolbarOpen && (
                   <div className="overflow-x-auto border-t border-border px-2 pb-2 pt-1">
                     <EditorToolbar

@@ -334,7 +334,8 @@ export default function PublicProjectsPage() {
     setSearchParams(
       (prev) => {
         const n = new URLSearchParams(prev)
-        dSearch ? n.set('search', dSearch) : n.delete('search')
+        if (dSearch) n.set('search', dSearch)
+        else n.delete('search')
         return n
       },
       { replace: true },
@@ -346,7 +347,8 @@ export default function PublicProjectsPage() {
     setSearchParams(
       (prev) => {
         const n = new URLSearchParams(prev)
-        dOwner ? n.set('owner', dOwner) : n.delete('owner')
+        if (dOwner) n.set('owner', dOwner)
+        else n.delete('owner')
         return n
       },
       { replace: true },
@@ -358,7 +360,8 @@ export default function PublicProjectsPage() {
     setSearchParams(
       (prev) => {
         const n = new URLSearchParams(prev)
-        value ? n.set(key, value) : n.delete(key)
+        if (value) n.set(key, value)
+        else n.delete(key)
         return n
       },
       { replace: true },

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# LaTeX engine WASM + TeX Live data (~480 MB) — fetched via `npm run fetch:tex-assets`, never committed.
+public/assets/busytex/
+
 # Local env: real values live in .env.development / .env.production (gitignored).
 # Commit only the .env.example template.
 .env

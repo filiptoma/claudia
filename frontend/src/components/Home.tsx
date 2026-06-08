@@ -1,14 +1,14 @@
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Bug, Globe, Layers, Lightbulb, Lock, Plus, StickyNote } from 'lucide-react'
+import { ArrowRight, Bug, Code2, Globe, Layers, Lightbulb, Lock, Plus, StickyNote } from 'lucide-react'
 import { useTree } from '../hooks/useTree'
 import { useAuth } from '../context/AuthContext'
 import { useTreeActions } from '../hooks/useTreeActions'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { projectVisibility } from '../lib/access'
-import { APP_NAME } from '../lib/brand'
-import { noteSplitPath, projectPath, publicProjectsPath } from '../lib/paths'
+import { APP_NAME, SOURCE_URL } from '../lib/brand'
+import { docSplitPath, noteSplitPath, projectPath, publicProjectsPath } from '../lib/paths'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import ProjectCard from './ProjectCard'
@@ -36,12 +36,23 @@ function FeedbackCta() {
         </Link>
         .
       </p>
+      {/* AGPL §13: a visible "offer source" link for network users. */}
+      <p className="mt-3 text-sm text-muted-foreground">
+        <a
+          href={SOURCE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 font-medium hover:underline"
+        >
+          <Code2 className="size-3.5" /> Source code
+        </a>
+      </p>
     </section>
   )
 }
 
 export default function Home() {
-  const { projects, documents, members, loading } = useTree()
+  const { projects, documents, folders, members, loading } = useTree()
   const { user, uid, isStaff } = useAuth()
   const actions = useTreeActions()
   const navigate = useNavigate()
@@ -80,8 +91,10 @@ export default function Home() {
   }, [projects, uid])
 
   const onCreateProject = async () => {
-    const p = await actions.newProject()
-    if (p) navigate(projectPath(p.slug))
+    const r = await actions.newProject()
+    if (!r) return
+    // LaTeX projects open their seeded main.tex straight into split mode; markdown opens the root.
+    navigate(r.mainDoc ? docSplitPath(r.project.slug, r.mainDoc, folders) : projectPath(r.project.slug))
   }
   const onQuickNote = async () => {
     const note = await actions.newQuickNote()

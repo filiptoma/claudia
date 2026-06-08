@@ -21,10 +21,10 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useIsMobile } from "../hooks/useIsMobile";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
-import { useTree } from "../hooks/useTree";
+import { treeKeys, useTree } from "../hooks/useTree";
 import { useTreeActions } from "../hooks/useTreeActions";
 import { useRouteContext } from "../hooks/useRouteContext";
 import { useQuickNotes } from "../hooks/useQuickNotes";
@@ -51,8 +51,12 @@ import type { Crumb } from "./Breadcrumbs";
 import ActionsMenu from "./ActionsMenu";
 import type { MenuAction } from "./ActionsMenu";
 import CreateMenu from "./CreateMenu";
+import ExportMenuItems from "./ExportMenuItems";
+import { readLiveDoc } from "../lib/liveDoc";
+import type { DocumentRec } from "../lib/types";
 import { usePermissionsDialog } from "../context/PermissionsDialogContext";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -89,6 +93,14 @@ export default function AppHeader() {
   const params = useParams();
   const { workspace, notes, findNote } = useQuickNotes();
   const permissions = usePermissionsDialog();
+  const qc = useQueryClient();
+
+  // Source for the app-bar Export menu (markdown docs + quick notes): the live editor content when its
+  // editor is mounted, else the saved content from the query cache (null while it's still loading).
+  const exportContent = (id: string): string | null =>
+    readLiveDoc(id) ??
+    qc.getQueryData<DocumentRec>(treeKeys.document(id))?.content ??
+    null;
 
   const memberCount = useMemo(
     () =>
@@ -220,7 +232,12 @@ export default function AppHeader() {
             <>
               <SaveIndicator />
               <ModeSwitch mode={noteMode} onChange={setMode} availableModes={noteModes} />
-              <ActionsMenu alwaysVisible label="Note actions" actions={menu} />
+              <ActionsMenu alwaysVisible label="Note actions" actions={menu}>
+                <ExportMenuItems
+                  getContent={() => exportContent(note.id)}
+                  title={docLabel(note)}
+                />
+              </ActionsMenu>
             </>
           }
         />
@@ -287,7 +304,9 @@ export default function AppHeader() {
   const isSettings = location.pathname === projectSettingsPath(project.slug);
   const visibility = projectVisibility(project, memberCount);
 
-  // The project crumb keeps its icon (workspace glyph or visibility) in every view.
+  // The project crumb keeps its icon (workspace glyph or visibility) in every view. LaTeX projects
+  // carry a "Beta" badge so the in-browser-compile feature is flagged as experimental everywhere.
+  const isLatexProject = project.type === "latex";
   const projectCrumb: Crumb = {
     label: project.name,
     to: projectPath(project.slug),
@@ -298,6 +317,18 @@ export default function AppHeader() {
         className={ICON_CLS}
       />
     ),
+    accessory: isLatexProject ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="secondary" className="ml-0.5 cursor-default">
+            Beta
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          LaTeX projects are a beta feature — compilation runs in your browser.
+        </TooltipContent>
+      </Tooltip>
+    ) : undefined,
   };
 
   // ----- /:project/settings -----
@@ -314,8 +345,15 @@ export default function AppHeader() {
   if (doc) {
     // Gate this view on the DOCUMENT'S effective permissions (folds in the document + parent-folder
     // caps), so a doc the owner locked to "view only" hides edit/comment affordances from everyone else.
-    const docCanEdit = canEditDocument(project, doc, folder, role, uid, myMemberRole);
-    const docCanComment = canCommentDocument(project, doc, folder, role, uid, myMemberRole);
+    // LaTeX is project-level only — edit = project edit, no commenter tier (§3.4), so docModes resolves
+    // to [view, split, edit] for editors and [view] for viewers, with no comment affordances.
+    const isLatex = isLatexProject;
+    const docCanEdit = isLatex
+      ? canEditProject(project, role, uid, myMemberRole)
+      : canEditDocument(project, doc, folder, role, uid, myMemberRole);
+    const docCanComment = isLatex
+      ? false
+      : canCommentDocument(project, doc, folder, role, uid, myMemberRole);
     // Mode comes straight from the URL (default "view"), clamped to what this user/device allows.
     const docModes = availableModesFor(docCanEdit, docCanComment, isMobile);
     const docMode = resolveMode(urlMode, docModes);
@@ -376,30 +414,46 @@ export default function AppHeader() {
         },
       },
     ];
+    // Export is available to anyone who can open the document — editors fold it into their actions
+    // menu, while commenters/viewers (who have no other ⋯ items) get an export-only menu. Markdown only:
+    // LaTeX projects compile their own PDF via a separate pipeline.
+    const exportItems = isLatex ? null : (
+      <ExportMenuItems
+        getContent={() => exportContent(doc.id)}
+        title={docLabel(doc)}
+        leadingSeparator={docCanEdit}
+      />
+    );
     return (
       <HeaderShell
         items={items}
         actions={
-          docCanEdit || docCanComment || ownerAvatar ? (
+          docCanEdit || docCanComment || exportItems || ownerAvatar ? (
             <>
-              {docCanEdit && (
+              {docCanEdit ? (
                 <>
                   <SaveIndicator />
                   {ownerAvatar}
                   <ModeSwitch mode={docMode} onChange={setMode} availableModes={docModes} />
-                  <ActionsMenu
-                    alwaysVisible
-                    label="Document actions"
-                    actions={menu}
-                  />
+                  <ActionsMenu alwaysVisible label="Document actions" actions={menu}>
+                    {exportItems}
+                  </ActionsMenu>
+                </>
+              ) : (
+                <>
+                  {docCanComment && (
+                    // Commenters suggest edits via split (desktop) or, since split is unavailable on
+                    // mobile, via edit mode (suggestion mode) on mobile.
+                    <ModeSwitch mode={docMode} onChange={setMode} availableModes={docModes} />
+                  )}
+                  {ownerAvatar}
+                  {exportItems && (
+                    <ActionsMenu alwaysVisible label="Document actions" actions={[]}>
+                      {exportItems}
+                    </ActionsMenu>
+                  )}
                 </>
               )}
-              {!docCanEdit && docCanComment && (
-                // Commenters suggest edits via split (desktop) or, since split is unavailable on
-                // mobile, via edit mode (suggestion mode) on mobile.
-                <ModeSwitch mode={docMode} onChange={setMode} availableModes={docModes} />
-              )}
-              {!docCanEdit && ownerAvatar}
             </>
           ) : null
         }

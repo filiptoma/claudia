@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
 import { useRouteContext } from '../hooks/useRouteContext'
-import { canCommentDocument, canEditDocument } from '../lib/access'
+import { canCommentDocument, canEditDocument, canEditProject } from '../lib/access'
 import { docLabel } from '../lib/labels'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { APP_NAME } from '../lib/brand'
@@ -17,9 +17,20 @@ export default function DocPage() {
   const myMemberRole = project
     ? members.find((m) => m.project_id === project.id && m.user_id === uid)?.role
     : undefined
-  // Effective access folds in the document's cap AND its parent folder's cap (migrations 0018/0020).
-  const canEdit = project && meta ? canEditDocument(project, meta, folder, role, uid, myMemberRole) : false
-  const canComment = project && meta ? canCommentDocument(project, meta, folder, role, uid, myMemberRole) : false
+  // Markdown: effective access folds in the document's cap AND its parent folder's cap (0018/0020).
+  // LaTeX: access is project-level only — edit = project edit, and there's no commenter tier (§3.4).
+  const canEdit =
+    project && meta
+      ? project.type === 'latex'
+        ? canEditProject(project, role, uid, myMemberRole)
+        : canEditDocument(project, meta, folder, role, uid, myMemberRole)
+      : false
+  const canComment =
+    project?.type === 'latex'
+      ? false
+      : project && meta
+        ? canCommentDocument(project, meta, folder, role, uid, myMemberRole)
+        : false
 
   // Tab title is the document's own title (covers regular docs and quick notes alike).
   useDocumentTitle(meta ? docLabel(meta) : APP_NAME)
@@ -39,5 +50,5 @@ export default function DocPage() {
     )
   }
 
-  return <DocumentBody meta={meta} canEdit={canEdit} canComment={canComment} />
+  return <DocumentBody meta={meta} project={project} canEdit={canEdit} canComment={canComment} />
 }

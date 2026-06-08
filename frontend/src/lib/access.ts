@@ -69,9 +69,14 @@ const allowsComment = (o: Override): boolean => o == null || o === 'commenter' |
 const isOwner = (project: Pick<Project, 'owner'>, uid: string | null): boolean =>
   !!uid && project.owner === uid
 
-/** Owner-only, non-workspace: who may set a folder/document permission cap (mirrors the DB trigger). */
-export function canSetPermissions(project: Pick<Project, 'owner' | 'is_workspace'>, uid: string | null): boolean {
-  return !project.is_workspace && isOwner(project, uid)
+/** Owner-only, non-workspace, markdown-only: who may set a folder/document permission cap (mirrors the
+ *  DB trigger). LaTeX projects have no per-file/per-folder caps (access is project-level only, §3.4), so
+ *  this single guard hides every "Permissions" menu entry across the app for them. */
+export function canSetPermissions(
+  project: Pick<Project, 'owner' | 'is_workspace' | 'type'>,
+  uid: string | null,
+): boolean {
+  return project.type === 'markdown' && !project.is_workspace && isOwner(project, uid)
 }
 
 /** Can this user edit THIS folder (rename/delete it, create documents in it)? */

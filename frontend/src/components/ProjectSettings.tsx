@@ -51,11 +51,14 @@ function RoleSelect({
   disabled,
   onChange,
   hideViewer,
+  hideCommenter,
 }: {
   value: MemberRole;
   disabled?: boolean;
   onChange: (r: MemberRole) => void;
   hideViewer?: boolean;
+  // LaTeX projects only offer Can view / Can edit — no commenter tier (§3.4).
+  hideCommenter?: boolean;
 }) {
   return (
     <Select
@@ -68,7 +71,7 @@ function RoleSelect({
       </SelectTrigger>
       <SelectContent>
         {!hideViewer && <SelectItem value="viewer">can view</SelectItem>}
-        <SelectItem value="commenter">can comment</SelectItem>
+        {!hideCommenter && <SelectItem value="commenter">can comment</SelectItem>}
         <SelectItem value="editor">can edit</SelectItem>
       </SelectContent>
     </Select>
@@ -91,6 +94,8 @@ export default function ProjectSettings() {
   const { project, projectSlug } = useRouteContext();
   const { role, uid } = useAuth();
   const { refresh, queries } = useTree();
+  // LaTeX sharing is Can view / Can edit only — no commenter tier (§3.4).
+  const isLatex = project?.type === "latex";
 
   useDocumentTitle(project ? `${project.name} · Settings` : undefined);
 
@@ -165,8 +170,9 @@ export default function ProjectSettings() {
       const next = !isPublic;
       await setProjectPublic(project.id, next);
       setIsPublic(next);
-      // Public projects are already readable by anyone; the minimum meaningful explicit role is commenter.
-      if (next && inviteRole === "viewer") setInviteRole("commenter");
+      // Public projects are already readable by anyone; the minimum meaningful explicit role is
+      // commenter — but LaTeX has no commenter tier, so it bumps straight to editor.
+      if (next && inviteRole === "viewer") setInviteRole(isLatex ? "editor" : "commenter");
       toast(
         "success",
         next ? "Project is now public" : "Project is now private",
@@ -318,6 +324,7 @@ export default function ProjectSettings() {
                       value={publicRole}
                       disabled={busy}
                       onChange={(r) => void changePublicRole(r)}
+                      hideCommenter={isLatex}
                     />
                   </div>
                   {publicRole === "editor" && (
@@ -356,6 +363,7 @@ export default function ProjectSettings() {
                     value={inviteRole}
                     onChange={setInviteRole}
                     hideViewer={isPublic}
+                    hideCommenter={isLatex}
                   />
                   <Button
                     type="submit"
@@ -397,6 +405,7 @@ export default function ProjectSettings() {
                       disabled={busy}
                       onChange={(r) => void changeRole(m.user_id, r)}
                       hideViewer={isPublic}
+                      hideCommenter={isLatex}
                     />
                     <Tooltip>
                       <TooltipTrigger asChild>

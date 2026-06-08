@@ -6,6 +6,7 @@ import {
   Bug,
   ChevronDown,
   ChevronRight,
+  Code2,
   FilePlus,
   FolderPlus,
   Lightbulb,
@@ -58,6 +59,7 @@ import {
   projectSettingsPath,
 } from "../lib/paths";
 import { docLabel } from "../lib/labels";
+import { SOURCE_URL } from "../lib/brand";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -126,11 +128,11 @@ export default function Sidebar({
     });
 
   const onCreateProject = async () => {
-    const p = await actions.newProject();
-    if (p) {
-      onCloseDrawer();
-      navigate(projectPath(p.slug));
-    }
+    const r = await actions.newProject();
+    if (!r) return;
+    onCloseDrawer();
+    // LaTeX projects open their seeded main.tex straight into split mode; markdown opens the root.
+    navigate(r.mainDoc ? docSplitPath(r.project.slug, r.mainDoc, folders) : projectPath(r.project.slug));
   };
   const onCreateDoc = async (p: Project, folderId: string | null) => {
     const doc = await actions.newDocument(p, folderId);
@@ -629,6 +631,12 @@ export default function Sidebar({
                     }}
                   >
                     <Lightbulb className="text-accent2" /> Feature request
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    {/* AGPL §13: offer source to network users. */}
+                    <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
+                      <Code2 /> Source code
+                    </a>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

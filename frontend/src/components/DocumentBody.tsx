@@ -7,19 +7,26 @@ import { useAnnotationActions } from '../hooks/useAnnotations'
 import QuerySuspense from './QuerySuspense'
 import AnnotationLayer from './annotations/AnnotationLayer'
 import { availableModesFor, resolveMode } from '../lib/docMode'
+import type { Project } from '../lib/types'
 
 // The editor pulls in CodeMirror + every language grammar, so it's only loaded when the user
 // actually enters edit/split mode — keeping the initial (read-only) bundle lean.
 const Editor = lazy(() => import('./Editor'))
+// LaTeX projects get a wholly separate editor/preview/compile pipeline (CodeMirror-stex + the busytex
+// engine). Lazy so none of that enters the markdown path's bundle.
+const LatexDocumentBody = lazy(() => import('./latex/LatexDocumentBody'))
 
 // Renders a single document (whether a project doc or a quick note): loads its content, then shows
 // the read view or the editor depending on ?mode. Shared so both routes behave identically.
 export default function DocumentBody({
   meta,
+  project,
   canEdit,
   canComment = false,
 }: {
   meta: DocMeta
+  /** Absent for quick notes (always workspace/markdown). LaTeX projects branch to their own body. */
+  project?: Project
   canEdit: boolean
   /** Can this user leave comments or suggest edits? True for commenter/editor/owner. */
   canComment?: boolean
@@ -28,6 +35,22 @@ export default function DocumentBody({
   const docQuery = useDocument(meta.id)
   const isMobile = useIsMobile()
   const annotationActions = useAnnotationActions(meta.id)
+
+  // LaTeX projects use an entirely separate editor/preview/compile pipeline; everything below this
+  // branch is the markdown path and stays unchanged. (Quick notes have no project → markdown.)
+  if (project?.type === 'latex') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Loading editor…
+          </div>
+        }
+      >
+        <LatexDocumentBody meta={meta} project={project} canEdit={canEdit} />
+      </Suspense>
+    )
+  }
 
   // True for users who can comment/suggest but cannot directly edit the document.
   const isCommenterOnly = canComment && !canEdit

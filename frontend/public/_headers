@@ -1,0 +1,15 @@
+# Cloudflare Pages headers. Long-cache the immutable LaTeX/Typst engine + bundled TeX assets: these
+# are content-stable static files served from public/ (which Vite/Pages do NOT content-hash), so they
+# need an explicit cache rule to avoid re-downloading hundreds of MB of WASM on every visit.
+#
+# IMPORTANT — this file intentionally sets NO Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy.
+# The LaTeX engine (texlyre-busytex) and Typst run on plain postMessage, not SharedArrayBuffer, so
+# cross-origin isolation is NOT required — and adding COOP/COEP under `require-corp` would break the
+# Supabase signed-image loading (those <img> from *.supabase.co carry no CORP header). See plan §0.
+
+/assets/busytex/*
+  Cache-Control: public, max-age=31536000, immutable
+/tex/*
+  Cache-Control: public, max-age=31536000, immutable
+/wasm/*
+  Cache-Control: public, max-age=31536000, immutable
