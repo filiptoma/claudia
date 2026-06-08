@@ -957,13 +957,19 @@ function EditorPreview({
           <div
             ref={docRef}
             onClick={eng.onDocClick}
-            // Cap the rendered text column (split mode only — read mode has its own wrapper). On a wide
-            // pane this makes the preview narrower than the full-width monospace editor, so prose wraps
-            // to more rows and the rendered preview ends up TALLER than the source. With top-line scroll
-            // sync that's what lets the editor's last line float with space below at the bottom
-            // (HackMD-style) rather than the editor running longer than the preview. Tune max-w to trade
+            // Centered, narrowed text column (split mode only — read mode has its own wrapper). Making
+            // the preview narrower than the full-width monospace editor means prose wraps to more rows, so
+            // the rendered preview ends up TALLER than the source — which (with top-line scroll sync) is
+            // what lets the editor's last line float with space below at the bottom (HackMD-style) rather
+            // than the editor running longer than the preview.
+            //
+            // Responsive (breakpoint → device map): the panes only sit side-by-side at md+ (below that
+            // `max-md:flex-col` stacks them, so the preview stays full width). At md+ the column is a
+            // PERCENTAGE of the pane (proportional narrowing that works on tablet portrait/landscape and
+            // desktop alike — a fixed rem cap would just no-op on the narrower tablet panes), centered,
+            // and capped on very wide desktops so lines don't get unreadably long. Tune w-5/6 to trade
             // column width for how much the editor floats.
-            className="max-w-4xl px-7 pt-4 pb-20"
+            className="w-full px-7 pt-4 pb-20 md:mx-auto md:w-5/6 md:max-w-4xl"
             style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
           >
             <Markdown
