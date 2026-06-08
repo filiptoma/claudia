@@ -5,17 +5,21 @@
 // NO AWS ACCOUNT INVOLVED. @aws-sdk/client-s3 is just a library that speaks the S3 protocol; here it
 // talks to Cloudflare R2. The only credential is a free Cloudflare R2 API token (Object Read & Write).
 //
-// ── One-time setup ──────────────────────────────────────────────────────────────────────────────
+// ── Setup (one-time) ────────────────────────────────────────────────────────────────────────────
 //   1. Cloudflare dashboard → R2 → "Manage R2 API Tokens" → Create API token → permission
 //      "Object Read & Write", scoped to the bucket. Copy the Access Key ID + Secret Access Key.
-//   2. Install the S3 client (transient — keeps it out of package.json):
-//        npm i --no-save @aws-sdk/client-s3 @aws-sdk/lib-storage
-//   3. Run (creds via env so they never hit your shell history file):
-//        R2_ACCESS_KEY_ID=xxx R2_SECRET_ACCESS_KEY=yyy node scripts/upload-latex-assets.mjs
+//   2. Add them to your gitignored `.env.production` (NOT VITE_-prefixed, so Vite never bundles them):
+//        R2_ACCESS_KEY_ID=...
+//        R2_SECRET_ACCESS_KEY=...
 //
-//   Optional env: R2_ACCOUNT_ID (default below), BUSYTEX_BUCKET (default "claudia-busytex").
+// ── Run (now and for every future asset upload) ───────────────────────────────────────────────────
+//        npm run upload:tex-assets        # loads .env.production automatically (--env-file-if-exists)
 //
-// Re-run after `npm run fetch:tex-assets` to push an engine upgrade (overwrites existing objects).
+//   Credentials come from the environment, so they never land in your shell history. Optional env:
+//   R2_ACCOUNT_ID (default below), BUSYTEX_BUCKET (default "claudia-busytex").
+//
+// Re-run `npm run fetch:tex-assets` then `npm run upload:tex-assets` to push an engine upgrade
+// (overwrites existing objects).
 
 import { readdir, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
@@ -31,8 +35,9 @@ const SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY
 
 if (!ACCESS_KEY_ID || !SECRET_ACCESS_KEY) {
   console.error(
-    'Missing credentials. Create an R2 API token (dashboard → R2 → Manage R2 API Tokens), then:\n' +
-      '  R2_ACCESS_KEY_ID=xxx R2_SECRET_ACCESS_KEY=yyy node scripts/upload-latex-assets.mjs',
+    'Missing credentials. Create an R2 API token (dashboard → R2 → Manage R2 API Tokens,\n' +
+      '"Object Read & Write"), then add to frontend/.env.production:\n' +
+      '  R2_ACCESS_KEY_ID=...\n  R2_SECRET_ACCESS_KEY=...\nand re-run `npm run upload:tex-assets`.',
   )
   process.exit(1)
 }

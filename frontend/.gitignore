@@ -15,6 +15,9 @@ dist-ssr
 # LaTeX engine WASM + TeX Live data (~480 MB) — fetched via `npm run fetch:tex-assets`, never committed.
 public/assets/busytex/
 
+# Wrangler local-simulator state (created by `wrangler r2 object` without --remote).
+.wrangler/
+
 # Local env: real values live in .env.development / .env.production (gitignored).
 # Commit only the .env.example template.
 .env

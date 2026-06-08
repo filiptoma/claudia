@@ -80,16 +80,21 @@ S3 path has no such cap. (`@aws-sdk/client-s3` is just a library that speaks S3 
 # a. Create a Cloudflare R2 API token (NOT AWS): dashboard → R2 → "Manage R2 API Tokens" →
 #    Create API token → permission "Object Read & Write" (scope to the bucket). Copy the
 #    Access Key ID + Secret Access Key it shows once.
-# b. Install the S3 client transiently (keeps it out of package.json):
+# b. Add them to your gitignored frontend/.env.production (these are NOT VITE_-prefixed, so Vite
+#    never bundles them into the client — they're only read by the upload script):
+#        R2_ACCESS_KEY_ID=...
+#        R2_SECRET_ACCESS_KEY=...
+# c. Upload everything:
 cd frontend
-npm i --no-save @aws-sdk/client-s3 @aws-sdk/lib-storage
-# c. Upload everything (creds via env so they don't land in shell history):
-R2_ACCESS_KEY_ID=xxx R2_SECRET_ACCESS_KEY=yyy node scripts/upload-latex-assets.mjs
+npm run upload:tex-assets
 ```
 
-Re-run that one command after a future `npm run fetch:tex-assets` to push an engine upgrade (it
-overwrites). Verify (note **`--remote`** — without it, `wrangler r2 object` hits a *local* simulator and
-reports "Resource location: local", which is the usual "key does not exist" gotcha):
+The `@aws-sdk/client-s3` + `@aws-sdk/lib-storage` libs are already devDependencies, and the npm script
+loads `.env.production` automatically (`--env-file-if-exists`), so creds never hit your shell history.
+
+Re-run `npm run upload:tex-assets` after a future `npm run fetch:tex-assets` to push an engine upgrade
+(it overwrites). Verify (note **`--remote`** — without it, `wrangler r2 object` hits a *local* simulator
+and reports "Resource location: local", which is the usual "key does not exist" gotcha):
 
 ```bash
 npx wrangler r2 object get claudia-busytex/texlive-extra.data --file /tmp/check.data --remote && ls -lh /tmp/check.data
