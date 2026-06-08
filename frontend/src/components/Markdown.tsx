@@ -13,6 +13,7 @@ import 'katex/dist/katex.min.css'
 import { STORAGE_PREFIX } from '../lib/storage'
 import { preprocessImageSizesMapped, rawToPreprocessed, readSizeFragment } from '../lib/mdImage'
 import rehypeSourceSpans from '../lib/sourceSpans'
+import rehypeSourceLines from '../lib/sourceLines'
 import rehypeSuggestionDiff from '../lib/suggestionDiff'
 import type { SuggestionRange } from '../lib/suggestionDiff'
 import MdImage from './MdImage'
@@ -107,6 +108,7 @@ export default function Markdown({
   onResizeImage,
   scrollRoot,
   annotate = false,
+  sourceLines = false,
   suggestions,
 }: {
   children: string
@@ -123,6 +125,9 @@ export default function Markdown({
   /** When set (view-mode annotation layer), wrap each text run in `<span class="sp" data-s data-e>`
    *  carrying its source offsets, so rendered selections can be mapped back to the markdown. */
   annotate?: boolean
+  /** When set (split-mode preview), stamp each rendered block with `data-startline`/`data-endline`
+   *  so the editor↔preview scroll sync can map rendered pixels back to source lines. */
+  sourceLines?: boolean
   /** Pending suggested edits to render inline as a diff (requires `annotate`). Offsets are raw
    *  `content` coordinates; they're translated to the rendered (preprocessed) space here. */
   suggestions?: { id: string; sourceStart: number; sourceEnd: number; suggested: string }[]
@@ -157,12 +162,18 @@ export default function Markdown({
   // Base rehype pipeline; in annotate mode, render suggestion diffs then stamp source offsets onto
   // text runs LAST (after highlight/katex) so only original, position-bearing text gets wrapped.
   const rehypePlugins = useMemo<PluggableList>(() => {
-    const base: PluggableList = [rehypeSlug, [rehypeHighlight, { detect: false, ignoreMissing: true }], rehypeKatex]
+    // rehypeSourceLines runs first (on pristine positions) so block line-stamps survive highlight/katex.
+    const base: PluggableList = [
+      ...(sourceLines ? [rehypeSourceLines] : []),
+      rehypeSlug,
+      [rehypeHighlight, { detect: false, ignoreMissing: true }],
+      rehypeKatex,
+    ]
     if (!annotate) return base
     return ppSuggestions.length > 0
       ? [...base, rehypeSuggestionDiff(ppSuggestions), rehypeSourceSpans]
       : [...base, rehypeSourceSpans]
-  }, [annotate, ppSuggestions])
+  }, [annotate, ppSuggestions, sourceLines])
 
   // Delegated link handling on the wrapper (robust regardless of how react-markdown renders anchors):
   //  • `#slug`  → scroll that heading to the top of its OWN scroll container (the preview/read panel),

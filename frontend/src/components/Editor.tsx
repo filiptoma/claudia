@@ -1,6 +1,7 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, PencilLine, X } from 'lucide-react'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useMarkdownScrollSync } from '../hooks/useMarkdownScrollSync'
 import type { ChangeEvent, RefObject } from 'react'
 import { AnnotationContext } from '../context/AnnotationContext'
 import { useAnnotationEngine } from '../hooks/useAnnotationEngine'
@@ -124,12 +125,14 @@ const SourceEditor = memo(function SourceEditor({
   theme,
   extensions,
   onChange,
+  onCreateEditor,
 }: {
   cmRef: RefObject<ReactCodeMirrorRef | null>
   value: string
   theme: Extension
   extensions: Extension[]
   onChange: (v: string) => void
+  onCreateEditor: (view: EditorView) => void
 }) {
   return (
     <CodeMirror
@@ -138,6 +141,7 @@ const SourceEditor = memo(function SourceEditor({
       theme={theme}
       extensions={extensions}
       onChange={onChange}
+      onCreateEditor={onCreateEditor}
       basicSetup={BASIC_SETUP}
       height="100%"
       className="min-h-0 flex-1 overflow-hidden"
@@ -200,6 +204,15 @@ export default function Editor({
   const saveTimer = useRef<number | undefined>(undefined)
   const previewTimer = useRef<number | undefined>(undefined)
   const previewRef = useRef<HTMLDivElement>(null)
+
+  // Line-anchored scroll sync (split mode): map the editor's top source line ↔ the matching preview
+  // block. Both the CodeMirror view and the preview's scroll container are captured as state so the
+  // effect re-runs once each is mounted. The view is stable, so the callback is memoised — otherwise it
+  // would defeat SourceEditor's memo and rebuild the editor.
+  const [cmView, setCmView] = useState<EditorView | null>(null)
+  const [previewEl, setPreviewEl] = useState<HTMLDivElement | null>(null)
+  const handleCreateEditor = useCallback((view: EditorView) => setCmView(view), [])
+  useMarkdownScrollSync(showPreview, cmView, previewEl)
 
   // Slash flow state. Stage 1 (`slash`) is the in-document command menu — a passive overlay; focus
   // stays in CodeMirror, the typed `/query` lives in the document, and the editor keymap drives it.
@@ -758,12 +771,14 @@ export default function Editor({
             theme={cmTheme}
             extensions={extensions}
             onChange={handleChange}
+            onCreateEditor={handleCreateEditor}
           />
           <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={onFilePicked} />
         </div>
         {showPreview && (
           <EditorPreview
             scrollRef={previewRef}
+            onScrollContainer={setPreviewEl}
             docId={doc.id}
             projectId={doc.project_id}
             canEdit={!suggestionMode}
@@ -874,6 +889,7 @@ export default function Editor({
 // where the annotation UI resolves to the touch combination: short bottom sheet + sidebar).
 function EditorPreview({
   scrollRef,
+  onScrollContainer,
   docId,
   projectId,
   canEdit,
@@ -883,6 +899,8 @@ function EditorPreview({
   onResizeImage,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>
+  /** Reports the scroll container element to the parent (for the editor↔preview scroll sync). */
+  onScrollContainer: (el: HTMLDivElement | null) => void
   docId: string
   projectId: string
   canEdit: boolean
@@ -892,6 +910,16 @@ function EditorPreview({
   onResizeImage: (index: number, width: number) => void
 }) {
   const docRef = useRef<HTMLDivElement>(null)
+  // Stable callback ref: an inline arrow would be re-created each render, making React detach/reattach
+  // (null → el) every time and needlessly tear down the scroll-sync effect. scrollRef/onScrollContainer
+  // are both stable, so this is created once.
+  const bindScroll = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el
+      onScrollContainer(el)
+    },
+    [scrollRef, onScrollContainer],
+  )
   const eng = useAnnotationEngine({
     docRef,
     docId,
@@ -911,7 +939,7 @@ function EditorPreview({
 
   return (
     <AnnotationContext.Provider value={eng.ctx}>
-      <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto">
+      <div ref={bindScroll} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto">
         <AnnotationToolbar
           count={eng.pendingCount}
           onOpenSidebar={() => eng.ctx.setSidebarOpen(true)}
@@ -926,6 +954,7 @@ function EditorPreview({
           <Markdown
             images={images}
             annotate
+            sourceLines
             suggestions={eng.suggestionDiffs}
             onToggleTask={onToggleTask}
             onResizeImage={onResizeImage}

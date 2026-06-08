@@ -1,0 +1,164 @@
+import { useEffect } from 'react'
+import type { EditorView } from '@codemirror/view'
+
+// Line-anchored scroll sync for the markdown split editor — the approach HackMD uses, adapted to
+// CodeMirror 6 + react-markdown.
+//
+// A naive `scrollTop/scrollHeight` ratio drifts badly: a 10-line code fence, a one-line image, or a
+// long table render to heights that bear no relation to their source length, so the panes slide out of
+// alignment. Instead we keep the SAME content at the top of both panes, addressed by source line:
+//
+//  • The rendered preview blocks carry `data-startline` (see lib/sourceLines). From them we build a
+//    "scroll map": a sorted list of {sourceLine → preview pixel offset} anchors. Interpolating between
+//    anchors gives a pixel for any (fractional) source line, and inverting it gives the line at any
+//    pixel.
+//  • CodeMirror 6's height geometry gives the exact pixel ↔ source-line mapping for the editor.
+//
+// Editor→preview: read the editor's top source line, map it through the scroll map, scroll the preview.
+// Preview→editor: read the preview's top source line from the map, map it to an editor pixel, scroll.
+//
+// Touch is the hard part (same as useSplitScrollSync): writing `dst.scrollTop` fires a scroll event,
+// and iOS momentum keeps firing for ~1s after the finger lifts; left unchecked the panes fight and walk
+// to the top. Fix: a per-pane suppression window — whenever we write a pane we mute its scroll handler
+// briefly, and the driving pane keeps refreshing that window so every echo (and the follower's own
+// momentum) is ignored until the gesture goes quiet. A finger landing on a pane makes it the driver and
+// mutes the other so leftover momentum can't hijack the sync.
+export function useMarkdownScrollSync(
+  enabled: boolean,
+  view: EditorView | null,
+  preview: HTMLElement | null,
+) {
+  useEffect(() => {
+    if (!enabled || !view || !preview) return
+    const editor = view.scrollDOM
+
+    // Scroll map: anchors sorted by source line, each carrying its top offset in the preview's scroll
+    // coordinate space. Rebuilt lazily (it's dirtied by re-renders / image loads / reflow).
+    type Anchor = { line: number; y: number }
+    let anchors: Anchor[] = []
+    let dirty = true
+
+    const buildMap = () => {
+      const blocks = preview.querySelectorAll<HTMLElement>('[data-startline]')
+      const pTop = preview.getBoundingClientRect().top - preview.scrollTop
+      const list: Anchor[] = []
+      let lastLine = -1
+      blocks.forEach((el) => {
+        const line = parseInt(el.getAttribute('data-startline') || '', 10)
+        if (!Number.isFinite(line) || line === lastLine) return // dedupe same-line (parent wins)
+        list.push({ line, y: el.getBoundingClientRect().top - pTop })
+        lastLine = line
+      })
+      list.sort((a, b) => a.line - b.line || a.y - b.y)
+      // Terminal anchor so lines past the last block extrapolate toward the document's full height
+      // (lets the tail of the doc scroll into view in step with the editor's scrollPastEnd slack).
+      list.push({ line: view.state.doc.lines + 1, y: preview.scrollHeight })
+      // Enforce monotonic offsets — guards against sub-pixel/layout oddities breaking the inversion.
+      for (let i = 1; i < list.length; i++) if (list[i].y < list[i - 1].y) list[i].y = list[i - 1].y
+      anchors = list
+      dirty = false
+    }
+
+    // Largest index whose anchor line/offset is <= the probe (binary search; anchors are sorted).
+    const floorIndex = (key: 'line' | 'y', value: number) => {
+      let lo = 0
+      let hi = anchors.length - 1
+      let ans = 0
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1
+        if (anchors[mid][key] <= value) {
+          ans = mid
+          lo = mid + 1
+        } else {
+          hi = mid - 1
+        }
+      }
+      return ans
+    }
+
+    // Preview pixel offset for a (fractional) source line.
+    const previewYForLine = (line: number): number => {
+      if (anchors.length === 0) return 0
+      if (line <= anchors[0].line) return anchors[0].y
+      const i = floorIndex('line', line)
+      const a = anchors[i]
+      const b = anchors[i + 1]
+      if (!b) return a.y
+      return a.y + ((line - a.line) / (b.line - a.line)) * (b.y - a.y)
+    }
+
+    // (Fractional) source line at a given preview pixel offset — the inverse of previewYForLine.
+    const lineForPreviewY = (y: number): number => {
+      if (anchors.length === 0) return 1
+      if (y <= anchors[0].y) return anchors[0].line
+      const i = floorIndex('y', y)
+      const a = anchors[i]
+      const b = anchors[i + 1]
+      if (!b || b.y === a.y) return a.line
+      return a.line + ((y - a.y) / (b.y - a.y)) * (b.line - a.line)
+    }
+
+    const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
+
+    // Source line (+ fraction through it) sitting at the top of the editor viewport. CM6 block heights
+    // are measured from the document content top; scrollTop includes the content's top padding.
+    const editorTopLine = (): number => {
+      const h = Math.max(0, editor.scrollTop - view.documentPadding.top)
+      const block = view.lineBlockAtHeight(h)
+      const line = view.state.doc.lineAt(block.from).number
+      const frac = block.height > 0 ? (h - block.top) / block.height : 0
+      return line + clamp01(frac)
+    }
+
+    // Editor scrollTop that puts a (fractional) source line at the top of the editor viewport — the
+    // inverse of editorTopLine.
+    const editorScrollTopForLine = (line: number): number => {
+      const doc = view.state.doc
+      const ln = Math.max(1, Math.min(doc.lines, Math.floor(line)))
+      const block = view.lineBlockAt(doc.line(ln).from)
+      return block.top + clamp01(line - ln) * block.height + view.documentPadding.top
+    }
+
+    const muteUntil = { editor: 0, preview: 0 }
+    const SUPPRESS_MS = 150
+    const write = (el: HTMLElement, key: 'editor' | 'preview', top: number) => {
+      // Skip no-op writes: writing fires no scroll event, so arming a mute here would only swallow the
+      // follower's next genuine user scroll.
+      if (Math.abs(el.scrollTop - top) <= 0.5) return
+      muteUntil[key] = performance.now() + SUPPRESS_MS
+      el.scrollTop = top
+    }
+
+    const onEditorScroll = () => {
+      if (performance.now() < muteUntil.editor) return
+      if (dirty) buildMap()
+      write(preview, 'preview', previewYForLine(editorTopLine()))
+    }
+    const onPreviewScroll = () => {
+      if (performance.now() < muteUntil.preview) return
+      if (dirty) buildMap()
+      write(editor, 'editor', editorScrollTopForLine(lineForPreviewY(preview.scrollTop)))
+    }
+    const onEditorTouch = () => { muteUntil.editor = 0; muteUntil.preview = performance.now() + SUPPRESS_MS }
+    const onPreviewTouch = () => { muteUntil.preview = 0; muteUntil.editor = performance.now() + SUPPRESS_MS }
+
+    // Re-renders, image loads and reflow change block offsets — mark the map stale so the next scroll
+    // rebuilds it. (A boolean flip only, so the observer can't loop.)
+    const ro = new ResizeObserver(() => { dirty = true })
+    ro.observe(preview)
+    const content = preview.querySelector('.md')
+    if (content) ro.observe(content)
+
+    editor.addEventListener('scroll', onEditorScroll, { passive: true })
+    preview.addEventListener('scroll', onPreviewScroll, { passive: true })
+    editor.addEventListener('touchstart', onEditorTouch, { passive: true })
+    preview.addEventListener('touchstart', onPreviewTouch, { passive: true })
+    return () => {
+      ro.disconnect()
+      editor.removeEventListener('scroll', onEditorScroll)
+      preview.removeEventListener('scroll', onPreviewScroll)
+      editor.removeEventListener('touchstart', onEditorTouch)
+      preview.removeEventListener('touchstart', onPreviewTouch)
+    }
+  }, [enabled, view, preview])
+}
