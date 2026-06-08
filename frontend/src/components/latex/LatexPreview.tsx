@@ -106,10 +106,15 @@ export default function LatexPreview({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex min-h-11 shrink-0 items-center gap-2 border-b border-border bg-card/40 px-3 py-1.5">
-        <Button size="sm" variant="outline" onClick={() => runCompile()} disabled={compiling}>
-          {compiling ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-          {compile.compiledAt ? 'Recompile' : 'Compile'}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="sm" variant="outline" onClick={() => runCompile()} disabled={compiling}>
+              {compiling ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              {compile.compiledAt ? 'Recompile' : 'Compile'}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{'Full build — resolves cross-references, citations & bibliography'}</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

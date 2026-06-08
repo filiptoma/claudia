@@ -11,9 +11,9 @@ import { cn } from "@/lib/utils";
 // The compile lifecycle, shared by the toolbar chip and useLatexCompile.
 export type CompileStatus = "idle" | "compiling" | "success" | "error";
 
-// Replaces EditorToolbar for LaTeX projects: Compile, an auto-compile toggle, Download PDF, and a
-// status chip. The hints use the app's Tooltip component (not the native `title` attribute) so they
-// match the styling and timing of every other tooltip in the UI.
+// Replaces EditorToolbar for LaTeX projects. Distinct, non-overlapping actions: **Compile** = the full
+// build (resolves refs/citations/bibliography); **Auto-draft** = auto-render a fast draft as you type;
+// the status chip shows Draft / Compiled / Compiling… / Error. Hints use the app's Tooltip component.
 export default function LatexToolbar({
   status,
   draft = false,
@@ -49,15 +49,22 @@ export default function LatexToolbar({
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          {"Full compile resolves cross-references & bibliography"}
+          {"Full build — resolves cross-references, citations & bibliography"}
         </TooltipContent>
       </Tooltip>
 
-      <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-muted-foreground">
-        <Switch checked={autoCompile} onCheckedChange={onToggleAutoCompile} />
-        <span className="max-sm:hidden">Auto-compile</span>
-        <span className="sm:hidden">Auto</span>
-      </label>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-muted-foreground">
+            <Switch checked={autoCompile} onCheckedChange={onToggleAutoCompile} />
+            <span className="max-sm:hidden">Auto-draft</span>
+            <span className="sm:hidden">Auto</span>
+          </label>
+        </TooltipTrigger>
+        <TooltipContent>
+          Auto-render a quick draft as you type — references resolve when you Compile
+        </TooltipContent>
+      </Tooltip>
 
       <div className="ml-auto flex items-center gap-2">
         <CompileChip status={status} draft={draft} />
@@ -102,13 +109,13 @@ function CompileChip({
           icon: <Check className="size-3.5" />,
           label: "Draft",
           cls: "text-amber-600 dark:text-amber-400",
-          hint: "Click Compile to resolve cross-references & bibliography",
+          hint: "Quick draft — references unresolved. Click Compile for the full build.",
         }
       : {
           icon: <Check className="size-3.5" />,
           label: "Compiled",
           cls: "text-emerald-600 dark:text-emerald-400",
-          hint: undefined,
+          hint: "Full build — references, citations & bibliography resolved.",
         },
     error: {
       icon: <AlertCircle className="size-3.5" />,

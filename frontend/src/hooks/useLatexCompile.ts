@@ -108,8 +108,6 @@ export function useLatexCompile(
           queued.current = false
           setState((s) => ({ ...s, status: 'compiling' }))
           const { id, main_document_id } = projectRef.current
-          const sig = signatureRef.current?.() ?? '' // captured pre-run; saved with the PDF so a later
-          // reopen can tell whether the project changed since (→ recompile) or not (→ reuse the cache).
           try {
             // Boot the engine (idempotent) concurrently with fetching the project files, so these two
             // slow steps overlap instead of running back-to-back.
@@ -122,8 +120,16 @@ export function useLatexCompile(
             const result = await compileLatex(files, mainPath, { draft: useDraft })
             if (result.pdf) {
               pdfRef.current = result.pdf // retain the last good PDF for download + preview
-              // Persist it so reopening/reloading the project shows it instantly (Overleaf-style).
-              void savePdf(id, result.pdf, { draft: useDraft, compiledAt: Date.now(), sig })
+              // Persist it so reopening/reloading shows it instantly (Overleaf-style). Capture the
+              // signature NOW that the compile has finished — by this point the ~800 ms autosave that
+              // bumped the doc's updated_at has landed, so the cached signature matches the content the
+              // PDF was built from. (Capturing at the START raced the autosave, so an edit → wait for
+              // the draft → navigate away → return wrongly looked "changed" and recompiled.)
+              void savePdf(id, result.pdf, {
+                draft: useDraft,
+                compiledAt: Date.now(),
+                sig: signatureRef.current?.() ?? '',
+              })
             }
             setState((prev) => ({
               status: result.success ? 'success' : 'error',
