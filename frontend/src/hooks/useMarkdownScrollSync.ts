@@ -134,46 +134,18 @@ export function useMarkdownScrollSync(
     // is editor-driven, which is what makes the preview track the cursor to the bottom of the doc.
     let driver: 'editor' | 'preview' = 'editor'
 
-    // Editor scrollTop that rests the LAST line at the bottom of the viewport — the editor's "natural"
-    // bottom. scrollPastEnd lets it scroll further (last line up toward the top); that extra range is the
-    // end-of-doc breathing space, during which the preview just stays pinned at its own bottom. The sync
-    // treats [0, nb] ⇆ [0, pMax] and never drives the editor into the slack beyond nb from the preview.
-    const editorNaturalBottom = (): number =>
-      Math.max(0, view.lineBlockAt(view.state.doc.length).bottom + view.documentPadding.top - editor.clientHeight)
-
-    // Exact-align the extremes (HackMD's tail handling). Pure line-anchoring can't make "one pane at its
-    // bottom" mean "the other at its bottom": a viewport of source lines is not a viewport of rendered
-    // pixels, so the top lines don't correspond at the ends. Near each extreme we blend toward it; `zone`
-    // ≈ one editor line, small enough not to disturb the middle.
-    const ZONE = () => view.defaultLineHeight
-
-    const syncFromEditor = () => {
-      const nb = editorNaturalBottom()
-      const eTop = editor.scrollTop
-      const pMax = preview.scrollHeight - preview.clientHeight
-      const zone = ZONE()
-      let target: number
-      if (nb > 0 && eTop >= nb) {
-        target = pMax // last line at/above the bottom (incl. the scrollPastEnd slack) → preview pinned
-      } else {
-        target = previewYForLine(editorTopLine())
-        if (eTop < zone) target *= clamp01(eTop / zone) // snap the exact top to the top
-        else if (nb > 0 && eTop > nb - zone) target += (pMax - target) * clamp01((eTop - (nb - zone)) / zone)
-      }
-      write(preview, 'preview', target)
-    }
-    const syncFromPreview = () => {
-      const nb = editorNaturalBottom()
-      const pTop = preview.scrollTop
-      const pMax = preview.scrollHeight - preview.clientHeight
-      const zone = ZONE()
-      let target = editorScrollTopForLine(lineForPreviewY(pTop))
-      if (pTop < zone) target *= clamp01(pTop / zone) // snap the exact top to the top
-      else if (pMax > 0 && pTop > pMax - zone) target += (nb - target) * clamp01((pTop - (pMax - zone)) / zone)
-      // The scrollPastEnd slack is reachable only by scrolling the editor itself — never push it there
-      // from the preview, so the preview's bottom maps to the editor's natural bottom, not its raw max.
-      write(editor, 'editor', Math.min(target, nb))
-    }
+    // Pure line-anchoring: keep the SAME source line at the top of both panes. Whichever pane the user
+    // drives, the other's top line is set to match — so the element at the top of the editor and the
+    // element at the top of the preview are always the same one (the property HackMD preserves).
+    //
+    // The editor's end-of-doc breathing space falls out of scrollPastEnd for free: when the preview is
+    // at its bottom, the editor shows the preview's top line at its top, which leaves the last line
+    // floating with empty space below (rather than glued to the bottom edge). And when the editor is
+    // scrolled down into that slack, editorTopLine saturates at the last line and previewYForLine returns
+    // the document's full height, so the write clamps the preview to its own bottom and it just stays
+    // pinned there.
+    const syncFromEditor = () => write(preview, 'preview', previewYForLine(editorTopLine()))
+    const syncFromPreview = () => write(editor, 'editor', editorScrollTopForLine(lineForPreviewY(preview.scrollTop)))
 
     const onEditorScroll = () => {
       if (performance.now() < muteUntil.editor) return
