@@ -720,7 +720,7 @@ export default function Editor({
           )}
           onBlur={() => { if (!suggestionMode) void doSave() }}
         >
-          <div className="shrink-0 border-b border-border bg-card/40">
+          <div className="shrink-0 border-b border-border bg-background">
             {isMobile ? (
               <>
                 <div className="flex h-12 items-center">
@@ -939,29 +939,36 @@ function EditorPreview({
 
   return (
     <AnnotationContext.Provider value={eng.ctx}>
-      <div ref={bindScroll} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto">
+      {/* The toolbar sits OUTSIDE the scroll area (like the editor's formatting toolbar above CodeMirror)
+          so the source and preview scroll viewports are the same height and stay in lockstep — top AND
+          bottom. With it sticky-inside the scroller, the preview viewport was ~44px taller, so scrolling
+          one pane to the bottom left the other short by the toolbar's height. */}
+      <div className="flex min-h-0 min-w-0 flex-1 basis-1/2 flex-col">
         <AnnotationToolbar
           count={eng.pendingCount}
           onOpenSidebar={() => eng.ctx.setSidebarOpen(true)}
           content={content}
+          autoHide={false}
         />
-        <div
-          ref={docRef}
-          onClick={eng.onDocClick}
-          className="px-7 pt-4 pb-20"
-          style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
-        >
-          <Markdown
-            images={images}
-            annotate
-            sourceLines
-            suggestions={eng.suggestionDiffs}
-            onToggleTask={onToggleTask}
-            onResizeImage={onResizeImage}
-            scrollRoot={() => scrollRef.current}
+        <div ref={bindScroll} className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            ref={docRef}
+            onClick={eng.onDocClick}
+            className="px-7 pt-4 pb-20"
+            style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
           >
-            {content}
-          </Markdown>
+            <Markdown
+              images={images}
+              annotate
+              sourceLines
+              suggestions={eng.suggestionDiffs}
+              onToggleTask={onToggleTask}
+              onResizeImage={onResizeImage}
+              scrollRoot={() => scrollRef.current}
+            >
+              {content}
+            </Markdown>
+          </div>
         </div>
       </div>
       {eng.overlays}

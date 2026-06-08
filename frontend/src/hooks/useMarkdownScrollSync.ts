@@ -129,22 +129,44 @@ export function useMarkdownScrollSync(
       el.scrollTop = top
     }
 
+    // Which pane the user last drove. Re-alignment after a reflow follows the driver so we never yank
+    // the pane being read. Defaults to 'editor' because typing — the common content-change trigger —
+    // is editor-driven, which is what makes the preview track the cursor to the bottom of the doc.
+    let driver: 'editor' | 'preview' = 'editor'
+
+    const syncFromEditor = () => write(preview, 'preview', previewYForLine(editorTopLine()))
+    const syncFromPreview = () => write(editor, 'editor', editorScrollTopForLine(lineForPreviewY(preview.scrollTop)))
+
     const onEditorScroll = () => {
       if (performance.now() < muteUntil.editor) return
+      driver = 'editor'
       if (dirty) buildMap()
-      write(preview, 'preview', previewYForLine(editorTopLine()))
+      syncFromEditor()
     }
     const onPreviewScroll = () => {
       if (performance.now() < muteUntil.preview) return
+      driver = 'preview'
       if (dirty) buildMap()
-      write(editor, 'editor', editorScrollTopForLine(lineForPreviewY(preview.scrollTop)))
+      syncFromPreview()
     }
-    const onEditorTouch = () => { muteUntil.editor = 0; muteUntil.preview = performance.now() + SUPPRESS_MS }
-    const onPreviewTouch = () => { muteUntil.preview = 0; muteUntil.editor = performance.now() + SUPPRESS_MS }
+    const onEditorTouch = () => { driver = 'editor'; muteUntil.editor = 0; muteUntil.preview = performance.now() + SUPPRESS_MS }
+    const onPreviewTouch = () => { driver = 'preview'; muteUntil.preview = 0; muteUntil.editor = performance.now() + SUPPRESS_MS }
 
-    // Re-renders, image loads and reflow change block offsets — mark the map stale so the next scroll
-    // rebuilds it. (A boolean flip only, so the observer can't loop.)
-    const ro = new ResizeObserver(() => { dirty = true })
+    // Re-renders (typing, debounced), image loads and reflow change block offsets. Rebuild the map and
+    // re-align from the driving pane so the two never drift — in particular, appending text keeps the
+    // preview pinned to the bottom alongside the editor. rAF-coalesced; only scrollTop is written (never
+    // size), so the observer can't loop.
+    let resyncRaf = 0
+    const ro = new ResizeObserver(() => {
+      dirty = true
+      if (resyncRaf) return
+      resyncRaf = requestAnimationFrame(() => {
+        resyncRaf = 0
+        buildMap()
+        if (driver === 'preview') syncFromPreview()
+        else syncFromEditor()
+      })
+    })
     ro.observe(preview)
     const content = preview.querySelector('.md')
     if (content) ro.observe(content)
@@ -155,6 +177,7 @@ export function useMarkdownScrollSync(
     preview.addEventListener('touchstart', onPreviewTouch, { passive: true })
     return () => {
       ro.disconnect()
+      if (resyncRaf) cancelAnimationFrame(resyncRaf)
       editor.removeEventListener('scroll', onEditorScroll)
       preview.removeEventListener('scroll', onPreviewScroll)
       editor.removeEventListener('touchstart', onEditorTouch)
