@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "fetch:tex-assets": "texlyre-busytex download-assets ./public/assets",
     "assets:typst": "node scripts/prepare-typst-wasm.mjs",
-    "upload:tex-assets": "node --env-file-if-exists=.env.production scripts/upload-latex-assets.mjs"
+    "upload:wasm-assets": "node --env-file-if-exists=.env.production scripts/upload-wasm-assets.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

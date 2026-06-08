@@ -20,7 +20,7 @@ if [ ! -d "$ASSET_DIR" ]; then
 fi
 cd "$ASSET_DIR"
 
-# NOTE: upload-latex-assets.mjs (S3 multipart) is the recommended uploader — it handles every file
+# NOTE: upload-wasm-assets.mjs (S3 multipart) is the recommended uploader — it handles every file
 # including the 324 MiB texlive-extra.data and needs no per-file size juggling. This wrangler script is
 # kept only as a no-extra-token fallback for the files that fit: `r2 object put` is single-shot and
 # hard-capped at 300 MiB, so anything larger (texlive-extra.data) is skipped here and must go via the .mjs.
@@ -38,7 +38,7 @@ for f in *; do
   esac
   size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
   if [ "$size" -gt "$WRANGLER_CAP" ]; then
-    printf '⤫ %-38s %8.1f MiB  > 300 MiB — SKIPPED (use upload-latex-assets-large.sh)\n' \
+    printf '⤫ %-38s %8.1f MiB  > 300 MiB — SKIPPED (use upload-wasm-assets-large.sh)\n' \
       "$f" "$(awk "BEGIN{print $size/1048576}")"
     oversized+=("$f")
     continue
@@ -52,6 +52,6 @@ echo "Done (wrangler-eligible files). Verify: npx wrangler r2 object get $BUCKET
 if [ "${#oversized[@]}" -gt 0 ]; then
   echo
   echo "⚠ ${#oversized[@]} file(s) over 300 MiB were skipped: ${oversized[*]}"
-  echo "  Upload them with upload-latex-assets.mjs (S3 multipart — handles all sizes)."
+  echo "  Upload them with upload-wasm-assets.mjs (S3 multipart — handles all sizes)."
   echo "  See ../../DEPLOY-LATEX.md."
 fi

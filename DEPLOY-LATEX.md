@@ -78,7 +78,7 @@ Override with `BUSYTEX_BUCKET=…` for the scripts below.)
 
 Each object's key must equal its filename, so the Function can map `/assets/busytex/<key>` → R2 `<key>`.
 
-**Use the Node uploader** — [`frontend/scripts/upload-latex-assets.mjs`](frontend/scripts/upload-latex-assets.mjs).
+**Use the Node uploader** — [`frontend/scripts/upload-wasm-assets.mjs`](frontend/scripts/upload-wasm-assets.mjs).
 It uploads every file over R2's **S3-compatible API**, which does **multipart**. This matters:
 `wrangler r2 object put` is single-shot and **hard-capped at 300 MiB**, so it physically cannot upload
 `texlive-extra.data` (324 MiB) — it errors `Wrangler only supports uploading files up to 300 MiB`. The
@@ -94,13 +94,13 @@ S3 path has no such cap. (`@aws-sdk/client-s3` is just a library that speaks S3 
 #        R2_SECRET_ACCESS_KEY=...
 # c. Upload everything:
 cd frontend
-npm run upload:tex-assets
+npm run upload:wasm-assets
 ```
 
 The `@aws-sdk/client-s3` + `@aws-sdk/lib-storage` libs are already devDependencies, and the npm script
 loads `.env.production` automatically (`--env-file-if-exists`), so creds never hit your shell history.
 
-Re-run `npm run upload:tex-assets` after a future `npm run fetch:tex-assets` to push an engine upgrade
+Re-run `npm run upload:wasm-assets` after a future `npm run fetch:tex-assets` to push an engine upgrade
 (it overwrites). Verify (note **`--remote`** — without it, `wrangler r2 object` hits a *local* simulator
 and reports "Resource location: local", which is the usual "key does not exist" gotcha):
 
@@ -109,7 +109,7 @@ npx wrangler r2 object get claudia-busytex/texlive-extra.data --file /tmp/check.
 ```
 
 > **Why not just wrangler?** It works for the files ≤ 300 MiB (and
-> [`scripts/upload-latex-assets.sh`](frontend/scripts/upload-latex-assets.sh) does exactly that as a
+> [`scripts/upload-wasm-assets.sh`](frontend/scripts/upload-wasm-assets.sh) does exactly that as a
 > no-extra-token fallback), but it skips `texlive-extra.data`. Since you don't want to drop any
 > packages, the Node/S3 uploader is the path that gets all four `.data` collections up.
 

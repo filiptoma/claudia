@@ -13,13 +13,13 @@
 //        R2_SECRET_ACCESS_KEY=...
 //
 // ── Run (now and for every future asset upload) ───────────────────────────────────────────────────
-//        npm run upload:tex-assets        # loads .env.production automatically (--env-file-if-exists)
+//        npm run upload:wasm-assets        # loads .env.production automatically (--env-file-if-exists)
 //
 //   Credentials come from the environment, so they never land in your shell history. Optional env:
 //   R2_ACCOUNT_ID (default below), BUSYTEX_BUCKET (default "claudia-busytex").
 //
 // Resumable + idempotent: files already in the bucket at the same size are skipped, and each upload
-// retries on transient failures — so just re-run `npm run upload:tex-assets` if it dies partway. To
+// retries on transient failures — so just re-run `npm run upload:wasm-assets` if it dies partway. To
 // push an engine upgrade, `npm run fetch:tex-assets` first (changed files differ in size → re-sent).
 
 import { readdir, stat } from 'node:fs/promises'
@@ -38,7 +38,7 @@ if (!ACCESS_KEY_ID || !SECRET_ACCESS_KEY) {
   console.error(
     'Missing credentials. Create an R2 API token (dashboard → R2 → Manage R2 API Tokens,\n' +
       '"Object Read & Write"), then add to frontend/.env.production:\n' +
-      '  R2_ACCESS_KEY_ID=...\n  R2_SECRET_ACCESS_KEY=...\nand re-run `npm run upload:tex-assets`.',
+      '  R2_ACCESS_KEY_ID=...\n  R2_SECRET_ACCESS_KEY=...\nand re-run `npm run upload:wasm-assets`.',
   )
   process.exit(1)
 }

@@ -9,7 +9,7 @@
 // per-file deploy cap, so (exactly like the busytex engine) it is self-hosted from the R2-backed
 // same-origin path below and fetched lazily on first export. In dev Vite serves it from
 // `public/assets/busytex/`; in prod the Pages Function fronts R2. Run `npm run assets:typst` to drop
-// the file into public/ (gitignored), then `npm run upload:tex-assets` to push it to R2. The fonts
+// the file into public/ (gitignored), then `npm run upload:wasm-assets` to push it to R2. The fonts
 // stay as Vite `?url` imports (each well under 25 MiB, so they deploy fine) so the PDF matches the
 // preview — default remote font assets are disabled; we ship Hanken Grotesk + JetBrains Mono + NewCM.
 
