@@ -539,16 +539,12 @@ export default function Editor({
     () => [
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       EditorView.lineWrapping,
+      // Bottom breathing space so the last line can scroll up off the bottom edge (HackMD-style). In
+      // split mode this also creates the end-of-doc region where the editor can scroll past while the
+      // preview stays pinned at its bottom — useMarkdownScrollSync syncs to the editor's *natural*
+      // bottom (last line at the viewport bottom), not into this slack.
+      scrollPastEnd(),
       cmChrome,
-      // scrollPastEnd lets the last line scroll to the TOP of the editor — comfortable in edit-only mode,
-      // but in split mode its viewport-tall slack means the editor's "bottom" is the last line at the top,
-      // which never lines up with the preview's bottom. In split mode swap it for a FIXED end-of-doc gap
-      // matching the preview's own bottom padding (pb-20 = 5rem), so the editor's max scroll rests the
-      // last line the same distance above the bottom as the preview's last block — comfortable space that
-      // stays aligned. Must come AFTER cmChrome, whose `padding: 1rem` shorthand would otherwise reset it.
-      showPreview
-        ? EditorView.theme({ '.cm-content': { paddingBottom: '5rem' } })
-        : scrollPastEnd(),
       // Reserve bottom space equal to the mobile suggestion sheet so the cursor stays above it while
       // typing. Read via ref at scroll time, so the extension never rebuilds — false positive.
       // eslint-disable-next-line react-hooks/refs
@@ -607,7 +603,7 @@ export default function Editor({
         },
       }),
     ],
-    [uploadAndInsert, syncSlash, showPreview],
+    [uploadAndInsert, syncSlash],
   )
 
   // Toolbar "@" button: insert a `/` at the caret and open the reference menu explicitly.
