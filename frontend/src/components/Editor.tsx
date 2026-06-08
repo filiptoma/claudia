@@ -943,29 +943,41 @@ function EditorPreview({
 
   return (
     <AnnotationContext.Provider value={eng.ctx}>
-      <div ref={bindScroll} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto">
+      {/* Toolbar sits OUTSIDE the scroll area (fixed, always visible — like the editor's formatting
+          toolbar above CodeMirror), so it never hides on scroll and both panes' scroll viewports are the
+          same height. */}
+      <div className="flex min-h-0 min-w-0 flex-1 basis-1/2 flex-col">
         <AnnotationToolbar
           count={eng.pendingCount}
           onOpenSidebar={() => eng.ctx.setSidebarOpen(true)}
           content={content}
+          autoHide={false}
         />
-        <div
-          ref={docRef}
-          onClick={eng.onDocClick}
-          className="px-7 pt-4 pb-20"
-          style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
-        >
-          <Markdown
-            images={images}
-            annotate
-            sourceLines
-            suggestions={eng.suggestionDiffs}
-            onToggleTask={onToggleTask}
-            onResizeImage={onResizeImage}
-            scrollRoot={() => scrollRef.current}
+        <div ref={bindScroll} className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            ref={docRef}
+            onClick={eng.onDocClick}
+            // Cap the rendered text column (split mode only — read mode has its own wrapper). On a wide
+            // pane this makes the preview narrower than the full-width monospace editor, so prose wraps
+            // to more rows and the rendered preview ends up TALLER than the source. With top-line scroll
+            // sync that's what lets the editor's last line float with space below at the bottom
+            // (HackMD-style) rather than the editor running longer than the preview. Tune max-w to trade
+            // column width for how much the editor floats.
+            className="max-w-4xl px-7 pt-4 pb-20"
+            style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
           >
-            {content}
-          </Markdown>
+            <Markdown
+              images={images}
+              annotate
+              sourceLines
+              suggestions={eng.suggestionDiffs}
+              onToggleTask={onToggleTask}
+              onResizeImage={onResizeImage}
+              scrollRoot={() => scrollRef.current}
+            >
+              {content}
+            </Markdown>
+          </div>
         </div>
       </div>
       {eng.overlays}
