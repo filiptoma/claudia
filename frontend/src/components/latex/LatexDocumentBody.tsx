@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useDocument } from '../../hooks/useTree'
+import { useDocument, useTree } from '../../hooks/useTree'
 import type { DocMeta } from '../../hooks/useTree'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { availableModesFor, resolveMode } from '../../lib/docMode'
@@ -35,24 +35,38 @@ export default function LatexDocumentBody({
   const [searchParams] = useSearchParams()
   const docQuery = useDocument(meta.id)
   const isMobile = useIsMobile()
+  const { documents } = useTree()
   const mode = resolveMode(searchParams.get('mode'), availableModesFor(canEdit, false, isMobile))
+
+  // A signature of the project's content: each doc's id + updated_at. When it still matches the cached
+  // PDF's signature on open, the project is unchanged → the recompile is skipped and the cached PDF is
+  // reused as-is. Editing a doc bumps its updated_at (via autosave) → signature changes → a recompile runs.
+  const signature = useMemo(
+    () =>
+      documents
+        .filter((d) => d.project_id === project.id && !d.is_quick_note)
+        .map((d) => `${d.id}:${d.updated_at}`)
+        .sort()
+        .join('|'),
+    [documents, project.id],
+  )
 
   // The editor registers its live (unsaved) buffer here so a compile overlays the latest keystrokes;
   // in view mode there's no editor and this stays null, so the compile uses saved content.
   const overrideRef = useRef<GetOverride | null>(null)
-  const compile = useLatexCompile(project, () => overrideRef.current?.() ?? null)
-  const runCompile = compile.compile
+  const compile = useLatexCompile(project, () => overrideRef.current?.() ?? null, () => signature)
+  const compileIfStale = compile.compileIfStale
 
-  // Kick off exactly one compile the first time a preview-bearing mode (view or split) is shown; later
-  // mode switches find the cached result and don't recompile. Split uses a fast draft; the Compile /
-  // Recompile button promotes it to a full build. Pure edit mode needs no PDF, so it waits until the
-  // user opens a preview.
+  // Kick off exactly one compile the first time a preview-bearing mode (view or split) is shown. The
+  // policy lives in compileIfStale: unchanged → reuse the cached PDF (no compile); first open → full
+  // (resolve refs/citations); changed → fast draft. Full rebuilds thereafter are manual (the Compile
+  // button) only. Later mode switches reuse the result; pure edit mode waits until a preview opens.
   const kicked = useRef(false)
   useEffect(() => {
     if (kicked.current || (mode !== 'view' && mode !== 'split')) return
     kicked.current = true
-    runCompile({ draft: mode === 'split' })
-  }, [mode, runCompile])
+    compileIfStale()
+  }, [mode, compileIfStale])
 
   // View mode compiles the whole project (its main doc), so it needs no per-doc content — render it as
   // soon as the project is known. Edit/split need the doc's source, so they wait on the doc query.

@@ -120,7 +120,10 @@ function CompileChip({
   const s = map[status];
   const chip = (
     <span
-      className={cn("flex items-center gap-1 text-xs font-medium", s.cls)}
+      className={cn(
+        "flex items-center gap-1 text-xs font-medium cursor-default",
+        s.cls,
+      )}
       aria-live="polite"
     >
       {s.icon}

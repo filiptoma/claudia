@@ -14,6 +14,9 @@ export interface CachedPdf {
   draft: boolean
   /** Epoch ms when it was compiled. */
   compiledAt: number
+  /** Signature of the project content this PDF was built from — used to decide whether a reopen needs to
+   *  recompile (sig unchanged → the cached PDF is current → skip the expensive compile). */
+  sig: string
 }
 
 async function openCache(): Promise<Cache | null> {
@@ -29,7 +32,7 @@ async function openCache(): Promise<Cache | null> {
 export async function savePdf(
   projectId: string,
   pdf: Uint8Array,
-  meta: { draft: boolean; compiledAt: number },
+  meta: { draft: boolean; compiledAt: number; sig: string },
 ): Promise<void> {
   const cache = await openCache()
   if (!cache) return
@@ -41,9 +44,11 @@ export async function savePdf(
         'content-type': 'application/pdf',
         'x-draft': meta.draft ? '1' : '0',
         'x-compiled-at': String(meta.compiledAt),
+        'x-sig': meta.sig,
       },
     })
     await cache.put(keyFor(projectId), res)
+    if (import.meta.env.DEV) console.debug('[latex] PDF cached', pdf.byteLength, 'bytes')
   } catch {
     // Quota exceeded / serialization failure → skip caching; the compile itself is unaffected.
   }
@@ -74,6 +79,7 @@ export async function loadPdf(projectId: string): Promise<CachedPdf | null> {
       pdf: new Uint8Array(buf),
       draft: res.headers.get('x-draft') === '1',
       compiledAt: Number(res.headers.get('x-compiled-at')) || 0,
+      sig: res.headers.get('x-sig') ?? '',
     }
   } catch {
     return null

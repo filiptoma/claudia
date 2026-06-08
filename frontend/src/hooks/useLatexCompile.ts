@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { compileLatex, warmLatexEngine, type ParsedError } from '../lib/latex/compiler'
 import { buildProjectVirtualFiles } from '../lib/latex/vfs'
-import { loadPdf, savePdf } from '../lib/latex/pdfCache'
+import { loadPdf, savePdf, type CachedPdf } from '../lib/latex/pdfCache'
 import { downloadFile, exportFilename } from '../lib/typst/export'
 import type { CompileStatus } from '../components/latex/LatexToolbar'
 import type { Project } from '../lib/types'
@@ -36,6 +36,11 @@ export interface UseLatexCompile extends LatexCompileState {
   hasPdf: boolean
   /** Run a compile (no-op-coalesced while one is already running). `draft` → fast single pass. */
   compile: (opts?: { draft?: boolean }) => void
+  /** The on-open compile policy (Overleaf-style). UNCHANGED since the cached PDF → skip (reuse it).
+   *  Nothing cached (first open) → FULL build, so cross-references & citations resolve. Changed since the
+   *  cache → fast DRAFT only. A full rebuild after the first time happens ONLY via the Compile button
+   *  (and typing always drafts) — auto-compiles never run the slow multi-pass build again. */
+  compileIfStale: () => void
   /** Download the last successful PDF as `<project name>.pdf`. */
   download: () => void
 }
@@ -58,16 +63,23 @@ export function useLatexCompile(
   project: Pick<Project, 'id' | 'name' | 'main_document_id'>,
   /** Returns the open editor's unsaved buffer for the doc being edited, or null (e.g. view mode). */
   getOverride?: GetOverride,
+  /** Returns a signature of the project's content (e.g. doc ids + updated_at). When it still matches the
+   *  cached PDF's signature on open, the recompile is skipped — the cached PDF is already current. */
+  getSignature?: () => string,
 ): UseLatexCompile {
   const [state, setState] = useState<LatexCompileState>(IDLE)
 
   // Refs keep `compile`/`download` stable across renders despite changing inputs. They're synced in an
   // effect (never in render — refs must not be touched during render) and read only at call time.
   const overrideRef = useRef(getOverride)
+  const signatureRef = useRef(getSignature)
   const pdfRef = useRef<Uint8Array | null>(null)
   const projectRef = useRef(project)
+  // The in-flight cache-load promise, awaited by compileIfStale so its staleness check sees the cache.
+  const cacheLoad = useRef<Promise<CachedPdf | null> | null>(null)
   useEffect(() => {
     overrideRef.current = getOverride
+    signatureRef.current = getSignature
     projectRef.current = project
   })
 
@@ -96,6 +108,8 @@ export function useLatexCompile(
           queued.current = false
           setState((s) => ({ ...s, status: 'compiling' }))
           const { id, main_document_id } = projectRef.current
+          const sig = signatureRef.current?.() ?? '' // captured pre-run; saved with the PDF so a later
+          // reopen can tell whether the project changed since (→ recompile) or not (→ reuse the cache).
           try {
             // Boot the engine (idempotent) concurrently with fetching the project files, so these two
             // slow steps overlap instead of running back-to-back.
@@ -109,7 +123,7 @@ export function useLatexCompile(
             if (result.pdf) {
               pdfRef.current = result.pdf // retain the last good PDF for download + preview
               // Persist it so reopening/reloading the project shows it instantly (Overleaf-style).
-              void savePdf(id, result.pdf, { draft: useDraft, compiledAt: Date.now() })
+              void savePdf(id, result.pdf, { draft: useDraft, compiledAt: Date.now(), sig })
             }
             setState((prev) => ({
               status: result.success ? 'success' : 'error',
@@ -152,17 +166,25 @@ export function useLatexCompile(
   }, [project.id])
 
   // On open, restore the last compiled PDF from the cross-session cache so the preview shows instantly
-  // (with a "recompiling" veil) instead of a blank wait while the engine cold-boots and recompiles. Only
-  // seeds when a fresh compile hasn't already produced a PDF — the parallel compile wins once it lands.
+  // instead of a blank wait. The promise is kept so compileIfStale can await it before deciding whether a
+  // recompile is even needed. Only seeds when no compile has started — the compile wins once it lands.
   useEffect(() => {
     let active = true
-    void loadPdf(project.id).then((cached) => {
+    const p = loadPdf(project.id)
+    cacheLoad.current = p
+    void p.then((cached) => {
       if (!active || !cached) return
       pdfRef.current ??= cached.pdf
       setState((prev) =>
-        prev.pdf
+        prev.pdf || prev.status === 'compiling'
           ? prev
-          : { ...prev, pdf: cached.pdf, draft: cached.draft, compiledAt: new Date(cached.compiledAt) },
+          : {
+              ...prev,
+              status: 'success',
+              pdf: cached.pdf,
+              draft: cached.draft,
+              compiledAt: new Date(cached.compiledAt),
+            },
       )
     })
     return () => {
@@ -170,10 +192,32 @@ export function useLatexCompile(
     }
   }, [project.id])
 
+  // Compile only when the cached PDF is missing or its content signature no longer matches the project —
+  // so reopening/reloading an UNCHANGED project shows the cached PDF with NO recompile. We await the
+  // cache load first so the decision is made against the real cached entry, not a not-yet-loaded one.
+  const compileIfStale = useCallback(() => {
+    void (async () => {
+      const cached = await (cacheLoad.current ?? Promise.resolve(null))
+      const sig = signatureRef.current?.() ?? ''
+      if (cached && cached.sig && sig && cached.sig === sig) {
+        if (import.meta.env.DEV) console.debug('[latex] PDF cache HIT — skipping recompile')
+        return // cached PDF is current → no recompile
+      }
+      // First open (nothing cached) → FULL so refs/citations resolve once, Overleaf-style. Changed since
+      // the cache → fast DRAFT only; a FULL rebuild thereafter happens solely via the Compile button.
+      const draft = !!cached
+      if (import.meta.env.DEV) {
+        console.debug(`[latex] PDF cache ${cached ? 'STALE — draft recompile' : 'MISS — full compile'}`)
+      }
+      compile({ draft })
+    })()
+  }, [compile])
+
   return {
     ...state,
     hasPdf: !!state.pdf,
     compile,
+    compileIfStale,
     download,
   }
 }
