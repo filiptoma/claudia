@@ -58,41 +58,47 @@ R2 is free up to 10 GB storage + generous egress; ~0.5 GB here costs nothing.
 ```bash
 cd frontend
 npx wrangler login                       # once, opens a browser
-npx wrangler r2 bucket create astronote-busytex
+npx wrangler r2 bucket create claudia-busytex
 ```
 
-(Bucket name is arbitrary — `astronote-busytex` is used throughout this doc.)
+(Bucket name is arbitrary — `claudia-busytex` is the live bucket and is used throughout this doc.
+Override with `BUSYTEX_BUCKET=…` for the scripts below.)
 
 ---
 
 ## 3. Upload `public/assets/busytex/*` to the bucket
 
 Each object's key must equal its filename, so the Function can map `/assets/busytex/<key>` → R2 `<key>`.
-Upload every file (flat — there are no subdirectories), preserving content types:
+
+**Use the Node uploader** — [`frontend/scripts/upload-latex-assets.mjs`](frontend/scripts/upload-latex-assets.mjs).
+It uploads every file over R2's **S3-compatible API**, which does **multipart**. This matters:
+`wrangler r2 object put` is single-shot and **hard-capped at 300 MiB**, so it physically cannot upload
+`texlive-extra.data` (324 MiB) — it errors `Wrangler only supports uploading files up to 300 MiB`. The
+S3 path has no such cap. (`@aws-sdk/client-s3` is just a library that speaks S3 to R2 — **no AWS account**.)
 
 ```bash
-cd frontend/public/assets/busytex
-for f in *; do
-  case "$f" in
-    *.wasm) ct=application/wasm ;;
-    *.js)   ct=text/javascript ;;
-    *.json) ct=application/json ;;
-    *.txt)  ct=text/plain ;;
-    *)      ct=application/octet-stream ;;
-  esac
-  echo "→ $f ($ct)"
-  npx wrangler r2 object put "astronote-busytex/$f" --file "$f" --content-type "$ct"
-done
+# a. Create a Cloudflare R2 API token (NOT AWS): dashboard → R2 → "Manage R2 API Tokens" →
+#    Create API token → permission "Object Read & Write" (scope to the bucket). Copy the
+#    Access Key ID + Secret Access Key it shows once.
+# b. Install the S3 client transiently (keeps it out of package.json):
+cd frontend
+npm i --no-save @aws-sdk/client-s3 @aws-sdk/lib-storage
+# c. Upload everything (creds via env so they don't land in shell history):
+R2_ACCESS_KEY_ID=xxx R2_SECRET_ACCESS_KEY=yyy node scripts/upload-latex-assets.mjs
 ```
 
-> The Function re-asserts the content type by extension anyway (so `instantiateStreaming` always gets
-> `application/wasm`), but setting it on upload keeps the objects correct if ever served another way.
-
-Re-run the same loop after a future `npm run fetch:tex-assets` to push an engine upgrade. Verify:
+Re-run that one command after a future `npm run fetch:tex-assets` to push an engine upgrade (it
+overwrites). Verify (note **`--remote`** — without it, `wrangler r2 object` hits a *local* simulator and
+reports "Resource location: local", which is the usual "key does not exist" gotcha):
 
 ```bash
-npx wrangler r2 object get astronote-busytex/busytex.wasm --file /tmp/check.wasm && ls -lh /tmp/check.wasm
+npx wrangler r2 object get claudia-busytex/texlive-extra.data --file /tmp/check.data --remote && ls -lh /tmp/check.data
 ```
+
+> **Why not just wrangler?** It works for the files ≤ 300 MiB (and
+> [`scripts/upload-latex-assets.sh`](frontend/scripts/upload-latex-assets.sh) does exactly that as a
+> no-extra-token fallback), but it skips `texlive-extra.data`. Since you don't want to drop any
+> packages, the Node/S3 uploader is the path that gets all four `.data` collections up.
 
 ---
 
@@ -103,7 +109,7 @@ The Function reads `env.BUSYTEX`. Bind the bucket under that exact name:
 - Cloudflare dashboard → **Workers & Pages** → your Pages project → **Settings → Functions →
   R2 bucket bindings** → **Add binding**:
   - **Variable name:** `BUSYTEX`
-  - **R2 bucket:** `astronote-busytex`
+  - **R2 bucket:** `claudia-busytex`
 - Add it to the **Production** environment (and **Preview** too if you want LaTeX on preview deploys).
 - **Re-deploy** the Pages project (bindings apply to new deployments). A redeploy of `main` is enough.
 
