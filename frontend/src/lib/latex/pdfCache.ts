@@ -49,8 +49,9 @@ export async function savePdf(
     })
     await cache.put(keyFor(projectId), res)
     if (import.meta.env.DEV) console.debug('[latex] PDF cached', pdf.byteLength, 'bytes')
-  } catch {
+  } catch (err) {
     // Quota exceeded / serialization failure → skip caching; the compile itself is unaffected.
+    if (import.meta.env.DEV) console.warn('[latex] PDF cache write FAILED', err)
   }
 }
 

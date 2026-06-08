@@ -146,7 +146,7 @@ export default function LatexEditor({
                 draft={compile.draft}
                 autoCompile={autoCompile}
                 onToggleAutoCompile={setAutoCompile}
-                onCompile={() => runCompile()}
+                onCompile={() => runCompile({ manual: true })}
                 onDownload={compile.download}
                 canDownload={compile.hasPdf}
               />
