@@ -89,7 +89,6 @@ export default function AnnotationToolbar({
   onOpenSidebar,
   content,
   showComments = true,
-  autoHide = true,
   className,
 }: {
   count: number
@@ -98,17 +97,12 @@ export default function AnnotationToolbar({
   content: string
   /** Show the comments/suggestions sidebar button. Hidden for plain viewers with nothing to read. */
   showComments?: boolean
-  /** Sticky-to-its-scroll-container + auto-hide-on-scroll-down behaviour (read mode). The split editor
-   *  sets this false: there the bar sits OUTSIDE the scroll area (mirroring the editor's formatting
-   *  toolbar) so both panes' scroll viewports are the same height and scroll in lockstep. */
-  autoHide?: boolean
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [hidden, setHidden] = useState(false)
 
   useEffect(() => {
-    if (!autoHide) return
     const el = ref.current
     if (!el) return
     const scroller = getScrollParent(el)
@@ -127,15 +121,15 @@ export default function AnnotationToolbar({
     }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [autoHide])
+  }, [])
 
   return (
     <div
       ref={ref}
       className={cn(
-        'flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-2.5',
-        autoHide && 'sticky top-0 z-20 transition-transform duration-200',
-        autoHide && hidden && '-translate-y-full',
+        'sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-2.5',
+        'transition-transform duration-200',
+        hidden && '-translate-y-full',
         className,
       )}
     >

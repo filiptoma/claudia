@@ -134,8 +134,33 @@ export function useMarkdownScrollSync(
     // is editor-driven, which is what makes the preview track the cursor to the bottom of the doc.
     let driver: 'editor' | 'preview' = 'editor'
 
-    const syncFromEditor = () => write(preview, 'preview', previewYForLine(editorTopLine()))
-    const syncFromPreview = () => write(editor, 'editor', editorScrollTopForLine(lineForPreviewY(preview.scrollTop)))
+    // Exact-align the extremes (HackMD's tail handling). Pure line-anchoring can't make "one pane at its
+    // bottom" mean "the other at its bottom": a viewport of source lines is not a viewport of rendered
+    // pixels, so the top lines don't correspond at the ends. Over the last/first `zone` px of the DRIVING
+    // pane, blend the line-anchored target toward the follower's own extreme (0 / its max). `zone` ≈ one
+    // editor line — small enough not to disturb the middle. (This — plus dropping the editor's
+    // scrollPastEnd in split mode so its max sits the last line near the bottom — is what makes
+    // scrolling either pane to the bottom land the other at the bottom too.)
+    const blendExtremes = (raw: number, srcTop: number, srcMax: number, dstMax: number, zone: number): number => {
+      if (srcMax <= 0 || zone <= 0) return raw
+      const past = srcTop - (srcMax - zone)
+      if (past > 0) return raw + (dstMax - raw) * clamp01(past / zone) // near bottom → follower's max
+      if (srcTop < zone) return raw * clamp01(srcTop / zone) // near top → 0
+      return raw
+    }
+
+    const syncFromEditor = () => {
+      const target = previewYForLine(editorTopLine())
+      const srcMax = editor.scrollHeight - editor.clientHeight
+      const dstMax = preview.scrollHeight - preview.clientHeight
+      write(preview, 'preview', blendExtremes(target, editor.scrollTop, srcMax, dstMax, view.defaultLineHeight))
+    }
+    const syncFromPreview = () => {
+      const target = editorScrollTopForLine(lineForPreviewY(preview.scrollTop))
+      const srcMax = preview.scrollHeight - preview.clientHeight
+      const dstMax = editor.scrollHeight - editor.clientHeight
+      write(editor, 'editor', blendExtremes(target, preview.scrollTop, srcMax, dstMax, view.defaultLineHeight))
+    }
 
     const onEditorScroll = () => {
       if (performance.now() < muteUntil.editor) return

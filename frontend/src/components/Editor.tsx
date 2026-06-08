@@ -539,7 +539,12 @@ export default function Editor({
     () => [
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       EditorView.lineWrapping,
-      scrollPastEnd(),
+      // scrollPastEnd lets the last line scroll to the TOP of the editor — comfortable for edit-only
+      // mode, but in split mode its viewport-tall bottom slack means the editor's "bottom" is the last
+      // line at the top, which never lines up with the preview's bottom. Drop it when the preview is
+      // shown; cmChrome's 1rem content padding leaves a small end-of-doc gap, and useMarkdownScrollSync
+      // blends both panes to their bottoms at the extreme.
+      showPreview ? [] : scrollPastEnd(),
       cmChrome,
       // Reserve bottom space equal to the mobile suggestion sheet so the cursor stays above it while
       // typing. Read via ref at scroll time, so the extension never rebuilds — false positive.
@@ -599,7 +604,7 @@ export default function Editor({
         },
       }),
     ],
-    [uploadAndInsert, syncSlash],
+    [uploadAndInsert, syncSlash, showPreview],
   )
 
   // Toolbar "@" button: insert a `/` at the caret and open the reference menu explicitly.
@@ -939,36 +944,29 @@ function EditorPreview({
 
   return (
     <AnnotationContext.Provider value={eng.ctx}>
-      {/* The toolbar sits OUTSIDE the scroll area (like the editor's formatting toolbar above CodeMirror)
-          so the source and preview scroll viewports are the same height and stay in lockstep — top AND
-          bottom. With it sticky-inside the scroller, the preview viewport was ~44px taller, so scrolling
-          one pane to the bottom left the other short by the toolbar's height. */}
-      <div className="flex min-h-0 min-w-0 flex-1 basis-1/2 flex-col">
+      <div ref={bindScroll} className="min-h-0 min-w-0 flex-1 basis-1/2 overflow-y-auto">
         <AnnotationToolbar
           count={eng.pendingCount}
           onOpenSidebar={() => eng.ctx.setSidebarOpen(true)}
           content={content}
-          autoHide={false}
         />
-        <div ref={bindScroll} className="min-h-0 flex-1 overflow-y-auto">
-          <div
-            ref={docRef}
-            onClick={eng.onDocClick}
-            className="px-7 pt-4 pb-20"
-            style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
+        <div
+          ref={docRef}
+          onClick={eng.onDocClick}
+          className="px-7 pt-4 pb-20"
+          style={docPaddingBottom ? { paddingBottom: docPaddingBottom } : undefined}
+        >
+          <Markdown
+            images={images}
+            annotate
+            sourceLines
+            suggestions={eng.suggestionDiffs}
+            onToggleTask={onToggleTask}
+            onResizeImage={onResizeImage}
+            scrollRoot={() => scrollRef.current}
           >
-            <Markdown
-              images={images}
-              annotate
-              sourceLines
-              suggestions={eng.suggestionDiffs}
-              onToggleTask={onToggleTask}
-              onResizeImage={onResizeImage}
-              scrollRoot={() => scrollRef.current}
-            >
-              {content}
-            </Markdown>
-          </div>
+            {content}
+          </Markdown>
         </div>
       </div>
       {eng.overlays}
