@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Copy, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from '@/lib/toast'
+import { countNormostrana } from '@/lib/normostrana'
 import { cn } from '@/lib/utils'
 
 // Nearest scroll container by overflow style (the page scroll area in read mode, the preview pane in
@@ -49,6 +50,27 @@ function CopyMarkdownButton({ content }: { content: string }) {
         </Button>
       </TooltipTrigger>
       <TooltipContent>{copied ? 'Copied!' : 'Copy markdown'}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+// Rendered-text length shown as a "normostrana" (Czech/Slovak standard page = 1 800 characters incl.
+// spaces). Counts the stripped prose, not the raw markdown. Memoised so it only recomputes when the
+// content changes (the split preview already feeds debounced content).
+function NormostranaChip({ content }: { content: string }) {
+  const { chars, pages } = useMemo(() => countNormostrana(content), [content])
+  const pagesLabel = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(pages)
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-default select-none text-xs font-medium tabular-nums text-muted-foreground">
+          {pagesLabel} NS
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{chars.toLocaleString()} characters incl. spaces · 1 normostrana = 1 800</TooltipContent>
     </Tooltip>
   )
 }
@@ -105,30 +127,33 @@ export default function AnnotationToolbar({
     <div
       ref={ref}
       className={cn(
-        'sticky top-0 z-20 flex h-11 shrink-0 items-center justify-end gap-0.5 border-b border-border bg-background px-2.5',
+        'sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-2.5',
         'transition-transform duration-200',
         hidden && '-translate-y-full',
         className,
       )}
     >
-      <CopyMarkdownButton content={content} />
-      {showComments && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onOpenSidebar}
-          aria-label="Open comments and suggestions"
-          className="gap-1.5 text-muted-foreground"
-        >
-          <MessageSquare className="size-4" />
-          {count > 0 && (
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] font-bold leading-none text-primary-foreground">
-              {count > 99 ? '99+' : count}
-            </span>
-          )}
-        </Button>
-      )}
+      <NormostranaChip content={content} />
+      <div className="flex items-center gap-0.5">
+        <CopyMarkdownButton content={content} />
+        {showComments && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onOpenSidebar}
+            aria-label="Open comments and suggestions"
+            className="gap-1.5 text-muted-foreground"
+          >
+            <MessageSquare className="size-4" />
+            {count > 0 && (
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] font-bold leading-none text-primary-foreground">
+                {count > 99 ? '99+' : count}
+              </span>
+            )}
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
