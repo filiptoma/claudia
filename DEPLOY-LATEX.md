@@ -47,7 +47,15 @@ This populates `public/assets/busytex/` (~480 MB, gitignored). Confirm the big f
 ls -lh public/assets/busytex/{busytex.wasm,texlive-basic.data,texlive-recommended.data,texlive-extra.data}
 ```
 
-You can compile LaTeX locally now (`npm run dev`) before doing anything below — local dev needs no R2.
+Then drop in the **Typst** compiler WASM (the markdown→PDF export engine). At 27 MB it also exceeds
+Pages' 25 MiB cap, so it can't be bundled into the build either — it's self-hosted from R2 next to the
+busytex assets:
+
+```bash
+npm run assets:typst   # copies node_modules' typst wasm → public/assets/busytex/ (gitignored)
+```
+
+You can use LaTeX compile and Typst export locally now (`npm run dev`) — local dev needs no R2.
 
 ---
 

@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "fetch:tex-assets": "texlyre-busytex download-assets ./public/assets",
+    "assets:typst": "node scripts/prepare-typst-wasm.mjs",
     "upload:tex-assets": "node --env-file-if-exists=.env.production scripts/upload-latex-assets.mjs"
   },
   "dependencies": {

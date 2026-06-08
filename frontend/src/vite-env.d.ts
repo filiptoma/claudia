@@ -8,6 +8,9 @@ interface ImportMetaEnv {
   readonly VITE_TEXLIVE_REMOTE_ENDPOINT?: string
   readonly VITE_BUSYTEX_COLLECTIONS?: string
   readonly VITE_BUSYTEX_CATALOG?: string
+  // Typst (markdown→PDF export) compiler WASM URL — same-origin, R2-served like busytex (too big for
+  // Pages' 25 MiB cap to bundle). Default in lib/typst/compiler.ts.
+  readonly VITE_TYPST_WASM_URL?: string
 }
 
 interface ImportMeta {

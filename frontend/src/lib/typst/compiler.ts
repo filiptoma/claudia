@@ -3,13 +3,22 @@
 // the small `{ source, shadows } -> Uint8Array` interface below.
 //
 // No cross-origin isolation: the compiler runs on plain async postMessage, so adding it does NOT
-// require COOP/COEP headers (which would break Supabase signed-image <img>s). The 27 MB compiler WASM
-// and the fonts are self-hosted via Vite `?url` imports (content-hashed, lazy-fetched on first export)
-// — there is no compile-time network dependency (default remote font assets are disabled; we ship our
-// own Hanken Grotesk + JetBrains Mono + New Computer Modern Math to match the preview, math included).
+// require COOP/COEP headers (which would break Supabase signed-image <img>s).
+//
+// The 27 MB compiler WASM is NOT bundled by Vite — at 27 MB it exceeds Cloudflare Pages' 25 MiB
+// per-file deploy cap, so (exactly like the busytex engine) it is self-hosted from the R2-backed
+// same-origin path below and fetched lazily on first export. In dev Vite serves it from
+// `public/assets/busytex/`; in prod the Pages Function fronts R2. Run `npm run assets:typst` to drop
+// the file into public/ (gitignored), then `npm run upload:tex-assets` to push it to R2. The fonts
+// stay as Vite `?url` imports (each well under 25 MiB, so they deploy fine) so the PDF matches the
+// preview — default remote font assets are disabled; we ship Hanken Grotesk + JetBrains Mono + NewCM.
 
 import { $typst, initOptions } from '@myriaddreamin/typst.ts'
-import wasmUrl from '@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm?url'
+
+// Same-origin URL the compiler WASM is fetched from (env-overridable so prod can repoint without a
+// code change). Lives alongside the busytex engine assets in R2; served by the same Pages Function.
+const TYPST_WASM_URL =
+  import.meta.env.VITE_TYPST_WASM_URL ?? '/assets/busytex/typst_ts_web_compiler_bg.wasm'
 // Static Hanken Grotesk instances — Typst 0.13 does not support variable fonts, so we ship one file
 // per weight the template requests (400/500/600/700/800 + italics).
 import hankenRegularUrl from '../../assets/fonts/HankenGrotesk-Regular.ttf?url'
@@ -50,7 +59,7 @@ let configured = false
 function configure() {
   if (configured) return
   $typst.setCompilerInitOptions({
-    getModule: () => wasmUrl,
+    getModule: () => TYPST_WASM_URL,
     beforeBuild: [initOptions.disableDefaultFontAssets(), initOptions.loadFonts(FONT_URLS)],
   })
   configured = true
