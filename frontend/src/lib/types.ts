@@ -17,6 +17,8 @@ export interface PublicProject {
   id: string
   name: string
   slug: string
+  /** 'markdown' | 'latex' — from list_public_projects (migration 0022) or a direct projects select. */
+  type: ProjectType
   owner: string | null
   owner_name: string | null
   owner_avatar_url: string | null

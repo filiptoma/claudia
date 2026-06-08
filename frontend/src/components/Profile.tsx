@@ -156,6 +156,7 @@ export default function Profile() {
                 key={p.id}
                 icon={<ProjectGlyph project={p} visibility={projectVisibility(p, 0)} />}
                 title={p.name}
+                projectType={p.type}
                 meta={new Date(p.updated_at).toLocaleDateString()}
                 to={projectPath(p.slug)}
               />

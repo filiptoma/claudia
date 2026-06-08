@@ -39,6 +39,10 @@ export interface UseLatexCompile extends LatexCompileState {
   download: () => void
 }
 
+/** The open editor's unsaved buffer for the doc being edited, overlaid on the project files at compile
+ *  time so the preview reflects keystrokes pre-autosave. Returns null when there's no live editor. */
+export type GetOverride = () => { id: string; content: string } | null
+
 const IDLE: LatexCompileState = {
   status: 'idle',
   pdf: null,
@@ -52,7 +56,7 @@ const IDLE: LatexCompileState = {
 export function useLatexCompile(
   project: Pick<Project, 'id' | 'name' | 'main_document_id'>,
   /** Returns the open editor's unsaved buffer for the doc being edited, or null (e.g. view mode). */
-  getOverride?: () => { id: string; content: string } | null,
+  getOverride?: GetOverride,
 ): UseLatexCompile {
   const [state, setState] = useState<LatexCompileState>(IDLE)
 

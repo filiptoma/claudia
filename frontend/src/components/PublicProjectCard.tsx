@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { BookOpen } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import ProfileAvatar from './ProfileAvatar'
+import ProjectTypeBadge from './ProjectTypeBadge'
 import { projectPath } from '../lib/paths'
 import type { PublicProject } from '../lib/types'
 
@@ -28,8 +29,11 @@ export default function PublicProjectCard({ project }: { project: PublicProject 
           <BookOpen className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 font-semibold leading-snug transition-colors group-hover:text-primary">
-            {project.name}
+          <div className="flex items-start gap-1.5">
+            <div className="line-clamp-2 min-w-0 flex-1 font-semibold leading-snug transition-colors group-hover:text-primary">
+              {project.name}
+            </div>
+            <ProjectTypeBadge type={project.type} className="mt-0.5" />
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
             {project.document_count} {project.document_count === 1 ? 'document' : 'documents'}

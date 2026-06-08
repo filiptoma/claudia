@@ -1,10 +1,10 @@
-import { useEffect } from 'react'
 import { Download, FileText, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import PdfPreview from './PdfPreview'
 import LogPanel from './LogPanel'
-import { useLatexCompile, type UseLatexCompile } from '../../hooks/useLatexCompile'
+import type { UseLatexCompile } from '../../hooks/useLatexCompile'
 import { useLatexErrorJump } from '../../hooks/useLatexErrorJump'
 import type { ParsedError } from '../../lib/latex/compiler'
 import type { Project } from '../../lib/types'
@@ -87,23 +87,20 @@ export function LatexPreviewPane({
   )
 }
 
-/** View mode — owns its compile state and auto-compiles the project's main doc on mount. */
+/** View mode — read-only, full width. The compile state is owned by LatexDocumentBody and passed in, so
+ *  switching to/from split reuses the PDF instead of recompiling (§5). */
 export default function LatexPreview({
   project,
   canEdit,
+  compile,
 }: {
   project: Project
   /** Editors can click a diagnostic to jump into the source (split mode); viewers can't, so rows are inert. */
   canEdit: boolean
+  compile: UseLatexCompile
 }) {
-  const compile = useLatexCompile(project)
   const runCompile = compile.compile
   const jump = useLatexErrorJump(project, { enabled: canEdit })
-
-  // Compile the project once when the read-only preview opens. `runCompile` is stable, so this runs once.
-  useEffect(() => {
-    runCompile()
-  }, [runCompile])
 
   const compiling = compile.status === 'compiling'
   return (
@@ -113,17 +110,21 @@ export default function LatexPreview({
           {compiling ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           {compile.compiledAt ? 'Recompile' : 'Compile'}
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto"
-          onClick={compile.download}
-          disabled={!compile.hasPdf}
-          title="Download the compiled PDF"
-        >
-          <Download />
-          <span className="max-sm:hidden">Download PDF</span>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto"
+              onClick={compile.download}
+              disabled={!compile.hasPdf}
+            >
+              <Download />
+              <span className="max-sm:hidden">Download PDF</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Download the compiled PDF</TooltipContent>
+        </Tooltip>
       </div>
       <PreviewBody compile={compile} onJump={canEdit ? jump : undefined} />
     </div>

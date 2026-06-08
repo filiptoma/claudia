@@ -5,9 +5,11 @@ import type { CompileStatus } from './LatexToolbar'
 import type { ParsedError } from '../../lib/latex/compiler'
 
 // Collapsible compile-output panel that sits below the PDF preview. Its header always shows the compile
-// status + error/warning counts; expanding it reveals the parsed diagnostics (each a click-to-line row,
-// §3.10) and the full raw TeX log. It auto-expands whenever a compile surfaces diagnostics, but the user
-// can collapse it again. Pure presentation — `onJump` is the only behaviour, wired by the parent.
+// status + error/warning counts (so failures are still obvious at a glance); it stays COLLAPSED by
+// default and only opens when the user clicks it — LaTeX warnings are common and noisy, so we don't pop
+// it open on every compile. Expanding reveals the parsed diagnostics (each a click-to-line row, §3.10)
+// and the full raw TeX log, in a height-capped scroll area. Pure presentation — `onJump` is the only
+// behaviour, wired by the parent.
 export default function LogPanel({
   status,
   log,
@@ -25,17 +27,8 @@ export default function LogPanel({
   className?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [seenErrors, setSeenErrors] = useState<ParsedError[] | null>(null)
   const errorCount = errors.filter((e) => e.severity === 'error').length
   const warnCount = errors.length - errorCount
-
-  // Pop the panel open whenever a fresh compile surfaces diagnostics (each compile yields a new errors
-  // array), then leave the user free to collapse it. Adjusting state during render — the React-recommended
-  // alternative to an effect for "derive state from a prop change" — avoids an extra commit.
-  if (seenErrors !== errors) {
-    setSeenErrors(errors)
-    if (errors.length > 0) setOpen(true)
-  }
 
   // Nothing worth showing before the first compile.
   if (status === 'idle' && !log) return null

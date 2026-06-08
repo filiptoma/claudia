@@ -12,6 +12,7 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { tex2typst } from 'tex2typst'
+import GithubSlugger from 'github-slugger'
 import type { Root, RootContent, Definition, List } from 'mdast'
 import { typstString } from './template'
 
@@ -61,13 +62,58 @@ export function mdastToTypst(tree: Root, opts: MdToTypstOptions = {}): string {
     }
   }
   collectDefs(tree.children as MdNode[])
-  const ctx: Ctx = { imagePaths: opts.imagePaths ?? new Map(), defs }
+  const ctx: Ctx = {
+    imagePaths: opts.imagePaths ?? new Map(),
+    defs,
+    headingLabels: collectHeadingLabels(tree.children as MdNode[]),
+    headingIndex: 0,
+  }
   return renderBlocks(tree.children as MdNode[], ctx)
 }
 
 interface Ctx {
   imagePaths: Map<string, string>
   defs: Map<string, Definition>
+  /** Heading anchor slug → the Typst label attached to that heading (for in-document `#…` jumps). */
+  headingLabels: Map<string, string>
+  /** Running count of headings emitted; the Nth heading's label is `heading-N` (see collectHeadingLabels). */
+  headingIndex: number
+}
+
+// --- heading anchors ------------------------------------------------------------------------------
+
+// The preview gives every heading a github-slugger id (via rehype-slug) that `[text](#slug)` links
+// jump to. We replay the SAME slugger over the headings in document order to map each anchor slug to
+// a stable Typst label (`heading-0`, `heading-1`, …), so renderBlock can attach that label to the
+// heading and renderLink can turn `#slug` into a clickable intra-document jump. Index-based label
+// names sidestep Typst's label-syntax constraints on arbitrary (possibly unicode) slug text.
+function collectHeadingLabels(nodes: MdNode[]): Map<string, string> {
+  const slugger = new GithubSlugger()
+  const labels = new Map<string, string>()
+  let i = 0
+  const walk = (ns: MdNode[]) => {
+    for (const n of ns) {
+      if (n.type === 'heading') {
+        labels.set(slugger.slug(headingPlainText(n.children as MdNode[])), `heading-${i++}`)
+      } else if ('children' in n && Array.isArray(n.children)) {
+        walk(n.children as MdNode[])
+      }
+    }
+  }
+  walk(nodes)
+  return labels
+}
+
+// A heading's slug source: its rendered text content, matching what rehype-slug sees in the preview's
+// HAST (text + inline code + math source; images carry no text content, so their alt is excluded).
+function headingPlainText(nodes: MdNode[]): string {
+  return nodes
+    .map((n) => {
+      if (n.type === 'text' || n.type === 'inlineCode' || n.type === 'inlineMath') return n.value
+      if (n.type === 'image' || n.type === 'imageReference') return ''
+      return 'children' in n && Array.isArray(n.children) ? headingPlainText(n.children as MdNode[]) : ''
+    })
+    .join('')
 }
 
 const PX_TO_PT = 0.75
@@ -110,11 +156,11 @@ function renderInline(node: MdNode, ctx: Ctx): string {
     case 'break':
       return `#linebreak()`
     case 'link':
-      return `#link(${typstString(node.url)})[${renderInlines(node.children as MdNode[], ctx)}]`
+      return renderLink(node.url, renderInlines(node.children as MdNode[], ctx), ctx)
     case 'linkReference': {
       const def = ctx.defs.get(node.identifier.toLowerCase())
       const inner = renderInlines(node.children as MdNode[], ctx)
-      return def ? `#link(${typstString(def.url)})[${inner}]` : inner
+      return def ? renderLink(def.url, inner, ctx) : inner
     }
     case 'inlineMath':
       return renderMath(node.value, false)
@@ -132,6 +178,18 @@ function renderInline(node: MdNode, ctx: Ctx): string {
   }
 }
 
+// Mirror the preview's three link behaviours. Anchor links jump to a heading; internal app routes
+// (references to other notes) can't resolve in a standalone PDF, so they render as plain selectable
+// text rather than dead links; everything else is a real external link.
+function renderLink(url: string, inner: string, ctx: Ctx): string {
+  if (url.startsWith('#')) {
+    const label = ctx.headingLabels.get(decodeURIComponent(url.slice(1)))
+    return label ? `#link(<${label}>)[${inner}]` : inner
+  }
+  if (url.startsWith('/') && !url.startsWith('//')) return inner
+  return `#link(${typstString(url)})[${inner}]`
+}
+
 // --- blocks ---------------------------------------------------------------------------------------
 
 function renderBlocks(nodes: MdNode[], ctx: Ctx): string {
@@ -143,16 +201,12 @@ function renderBlocks(nodes: MdNode[], ctx: Ctx): string {
 
 function renderBlock(node: MdNode, ctx: Ctx): string {
   switch (node.type) {
-    case 'heading':
-      return `#heading(level: ${node.depth})[${renderInlines(node.children as MdNode[], ctx)}]`
-    case 'paragraph': {
-      const children = node.children as MdNode[]
-      // A lone image is a block-level figure (matches the .md-img-plate centered block).
-      if (children.length === 1 && children[0].type === 'image') {
-        return renderBlockImage(children[0].url, children[0].alt ?? '', ctx)
-      }
-      return guardBlockStart(renderInlines(children, ctx))
+    case 'heading': {
+      const label = `heading-${ctx.headingIndex++}`
+      return `#heading(level: ${node.depth})[${renderInlines(node.children as MdNode[], ctx)}] <${label}>`
     }
+    case 'paragraph':
+      return renderParagraph(node.children as MdNode[], ctx)
     case 'blockquote':
       return `#blockquote[${renderBlocks(node.children as MdNode[], ctx)}]`
     case 'code':
@@ -234,6 +288,44 @@ function renderMath(latex: string, block: boolean): string {
     return block ? `#raw(${typstString(latex)}, block: true)` : `#raw(${typstString(latex)})`
   }
   return block ? `$\n${typ}\n$` : `$${typ}$`
+}
+
+// Every image is a centered block (mirroring the `.md-img-plate` preview, where the block-level
+// plate forces a line break — text only ever flows above or below an image, never beside it). So a
+// paragraph that mixes text and images is split into separate blocks at each top-level image, the
+// same break the HTML plate produces. Images nested inside other inline markup (link/emphasis) are
+// rare and stay inline via renderInline's `image` case.
+function renderParagraph(children: MdNode[], ctx: Ctx): string {
+  const blocks: string[] = []
+  let run: MdNode[] = []
+  const flushRun = () => {
+    if (run.length === 0) return
+    const inline = renderInlines(run, ctx)
+    if (inline.length > 0) blocks.push(guardBlockStart(inline))
+    run = []
+  }
+  for (const child of children) {
+    const img = blockImageFor(child, ctx)
+    if (img === null) {
+      run.push(child)
+      continue
+    }
+    flushRun()
+    if (img.length > 0) blocks.push(img)
+  }
+  flushRun()
+  return blocks.join('\n\n')
+}
+
+// A top-level paragraph child that is an image → its centered `#mdimage` markup (or alt-text
+// fallback); anything else → null so it stays in the surrounding inline text run.
+function blockImageFor(node: MdNode, ctx: Ctx): string | null {
+  if (node.type === 'image') return renderBlockImage(node.url, node.alt ?? '', ctx)
+  if (node.type === 'imageReference') {
+    const def = ctx.defs.get(node.identifier.toLowerCase())
+    return def ? renderBlockImage(def.url, node.alt ?? '', ctx) : guardBlockStart(escapeText(node.alt ?? ''))
+  }
+  return null
 }
 
 // --- images ---------------------------------------------------------------------------------------

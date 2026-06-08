@@ -15,12 +15,16 @@ export function availableModesFor(canEdit: boolean, canComment: boolean, isMobil
   return ['view']
 }
 
-// Resolve the active mode from the URL param, clamped to what's available; defaults to 'view'.
-// 'split' is desktop-only — on a device without it (mobile) an explicit `?mode=split` degrades to its
-// editing sibling 'edit' (so a "split" link or a freshly-created note still opens the editor, not a
-// read-only view). Only an absent/unknown param means 'view'.
-export function resolveMode(urlMode: string | null, available: Mode[]): Mode {
+// Resolve the active mode from the URL param, clamped to what's available. When the param is absent or
+// unusable, fall back to `fallback` (default 'view'); callers that want a different landing mode pass
+// one — e.g. LaTeX opens editors straight into 'split'. 'split' is desktop-only, so on mobile both an
+// explicit `?mode=split` and a 'split' fallback degrade to their editing sibling 'edit' (so a "split"
+// link or default still opens the editor, not a read-only view).
+export function resolveMode(urlMode: string | null, available: Mode[], fallback: Mode = 'view'): Mode {
   if (urlMode && (available as readonly string[]).includes(urlMode)) return urlMode as Mode
   if (urlMode === 'split' && available.includes('edit')) return 'edit'
+  // No usable URL mode → fall back, clamped to this device's available modes.
+  if (available.includes(fallback)) return fallback
+  if (fallback === 'split' && available.includes('edit')) return 'edit'
   return 'view'
 }

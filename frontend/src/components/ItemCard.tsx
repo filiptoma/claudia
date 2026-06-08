@@ -27,8 +27,8 @@ export default function ItemCard({
   meta?: ReactNode
   to: string
   menu?: MenuAction[]
-  /** Icon-chip tint. 'indigo' marks the quick-note identity; everything else uses the warm default. */
-  accent?: 'default' | 'indigo'
+  /** Icon-chip tint. 'indigo' = quick notes, 'blue' = public projects, default = warm muted. */
+  accent?: 'default' | 'indigo' | 'blue'
   className?: string
 }) {
   const hasMenu = menu.length > 0
@@ -55,6 +55,8 @@ export default function ItemCard({
             'flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors [&_svg]:size-5',
             accent === 'indigo'
               ? 'bg-accent2/12 text-accent2 group-hover:bg-accent2/20'
+              : accent === 'blue'
+              ? 'bg-blue-100/70 group-hover:bg-blue-100 dark:bg-blue-400/10 dark:group-hover:bg-blue-400/18'
               : 'bg-muted text-muted-foreground group-hover:bg-primary/15 group-hover:text-foreground',
           )}
         >

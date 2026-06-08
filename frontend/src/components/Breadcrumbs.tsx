@@ -180,14 +180,18 @@ export default function Breadcrumbs({ items }: { items: Crumb[] }) {
                 onSubmit={c.editable.onSubmit}
               />
             ) : c.to && !last ? (
-              <Link
-                to={c.to}
-                className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground transition-colors hover:text-foreground hover:underline"
-              >
-                {c.icon}
-                <span className="truncate">{c.label}</span>
+              // Keep the accessory (e.g. the LaTeX "Beta" badge) OUTSIDE the link, so the link's
+              // hover:underline and navigation don't apply to it — it's a hover-only tooltip chip.
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Link
+                  to={c.to}
+                  className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground transition-colors hover:text-foreground hover:underline"
+                >
+                  {c.icon}
+                  <span className="truncate">{c.label}</span>
+                </Link>
                 {c.accessory}
-              </Link>
+              </span>
             ) : (
               <span
                 className={cn(

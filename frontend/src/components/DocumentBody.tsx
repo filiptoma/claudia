@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useDocument } from '../hooks/useTree'
 import type { DocMeta } from '../hooks/useTree'
@@ -31,10 +31,26 @@ export default function DocumentBody({
   /** Can this user leave comments or suggest edits? True for commenter/editor/owner. */
   canComment?: boolean
 }) {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const docQuery = useDocument(meta.id)
   const isMobile = useIsMobile()
   const annotationActions = useAnnotationActions(meta.id)
+
+  // For markdown documents: if no ?mode= is present, auto-set the default based on permissions.
+  // Editors/commenters default to split (desktop) or edit (mobile) so the URL reflects the active
+  // mode. View-only users get no ?mode= at all — keeping them unaware that other modes exist.
+  useEffect(() => {
+    if (searchParams.get('mode') !== null) return
+    if (!canEdit && !canComment) return
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('mode', isMobile ? 'edit' : 'split')
+        return next
+      },
+      { replace: true },
+    )
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // LaTeX projects use an entirely separate editor/preview/compile pipeline; everything below this
   // branch is the markdown path and stays unchanged. (Quick notes have no project → markdown.)
@@ -47,7 +63,9 @@ export default function DocumentBody({
           </div>
         }
       >
-        <LatexDocumentBody meta={meta} project={project} canEdit={canEdit} />
+        {/* Keyed by project so the compile state (lifted into LatexDocumentBody) resets per project but
+            survives mode/doc switches within one project — see its header comment. */}
+        <LatexDocumentBody key={project.id} meta={meta} project={project} canEdit={canEdit} />
       </Suspense>
     )
   }

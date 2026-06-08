@@ -9,7 +9,7 @@ import ProjectCard from './ProjectCard'
 import PageLayout from './PageLayout'
 import SectionHeader from './SectionHeader'
 import { Button } from '@/components/ui/button'
-import type { PublicProfileSummary, PublicProject } from '../lib/types'
+import type { ProjectType, PublicProfileSummary, PublicProject } from '../lib/types'
 import { APP_NAME } from '../lib/brand'
 
 export default function UserProfilePage() {
@@ -43,14 +43,14 @@ export default function UserProfilePage() {
       // Fetch their public projects
       const { data: projData } = await supabase
         .from('projects')
-        .select('id, name, slug, owner, created_at, updated_at')
+        .select('id, name, slug, type, owner, created_at, updated_at')
         .eq('owner', userId)
         .eq('is_public', true)
         .eq('is_workspace', false)
         .order('updated_at', { ascending: false })
       if (!active) return
       setProjects(
-        ((projData as { id: string; name: string; slug: string; owner: string; created_at: string; updated_at: string }[]) ?? []).map((pr) => ({
+        ((projData as { id: string; name: string; slug: string; type: ProjectType; owner: string; created_at: string; updated_at: string }[]) ?? []).map((pr) => ({
           ...pr,
           owner_name: p.name,
           owner_avatar_url: p.avatar_url,
@@ -130,6 +130,7 @@ export default function UserProfilePage() {
                 key={p.id}
                 icon={<BookOpen className="size-5" />}
                 title={p.name}
+                projectType={p.type}
                 meta={`Updated ${fmtDate(p.updated_at)}`}
                 to={projectPath(p.slug)}
               />

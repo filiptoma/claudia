@@ -10,7 +10,7 @@ export const cmChrome = EditorView.theme({
     fontSize: '0.95rem',
     lineHeight: '1.7',
   },
-  '.cm-content': { padding: '1rem 1rem 5rem' },
+  '.cm-content': { padding: '1rem' },
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none' },
 })
 

@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import {
   FilePlus,
+  FlaskConical,
   FolderPlus,
   Lock,
   Menu,
@@ -231,7 +232,11 @@ export default function AppHeader() {
           actions={
             <>
               <SaveIndicator />
-              <ModeSwitch mode={noteMode} onChange={setMode} availableModes={noteModes} />
+              <ModeSwitch
+                mode={noteMode}
+                onChange={setMode}
+                availableModes={noteModes}
+              />
               <ActionsMenu alwaysVisible label="Note actions" actions={menu}>
                 <ExportMenuItems
                   getContent={() => exportContent(note.id)}
@@ -320,12 +325,16 @@ export default function AppHeader() {
     accessory: isLatexProject ? (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge variant="secondary" className="ml-0.5 cursor-default">
+          <Badge
+            variant="notice"
+            className="ml-0.5 cursor-default gap-1 font-semibold no-underline"
+          >
+            <FlaskConical />
             Beta
           </Badge>
         </TooltipTrigger>
         <TooltipContent>
-          LaTeX projects are a beta feature — compilation runs in your browser.
+          LaTeX projects are a beta feature, expect bugs
         </TooltipContent>
       </Tooltip>
     ) : undefined,
@@ -354,9 +363,14 @@ export default function AppHeader() {
     const docCanComment = isLatex
       ? false
       : canCommentDocument(project, doc, folder, role, uid, myMemberRole);
-    // Mode comes straight from the URL (default "view"), clamped to what this user/device allows.
+    // Mode comes from the URL, clamped to what this user/device allows. When the URL omits it, LaTeX
+    // lands editors in split and viewers in view (§3.x); markdown keeps the universal "view" default.
     const docModes = availableModesFor(docCanEdit, docCanComment, isMobile);
-    const docMode = resolveMode(urlMode, docModes);
+    const docMode = resolveMode(
+      urlMode,
+      docModes,
+      isLatex && docCanEdit ? "split" : "view",
+    );
     const items: Crumb[] = [projectCrumb];
     if (folder)
       items.push({
@@ -434,8 +448,16 @@ export default function AppHeader() {
                 <>
                   <SaveIndicator />
                   {ownerAvatar}
-                  <ModeSwitch mode={docMode} onChange={setMode} availableModes={docModes} />
-                  <ActionsMenu alwaysVisible label="Document actions" actions={menu}>
+                  <ModeSwitch
+                    mode={docMode}
+                    onChange={setMode}
+                    availableModes={docModes}
+                  />
+                  <ActionsMenu
+                    alwaysVisible
+                    label="Document actions"
+                    actions={menu}
+                  >
                     {exportItems}
                   </ActionsMenu>
                 </>
@@ -444,11 +466,19 @@ export default function AppHeader() {
                   {docCanComment && (
                     // Commenters suggest edits via split (desktop) or, since split is unavailable on
                     // mobile, via edit mode (suggestion mode) on mobile.
-                    <ModeSwitch mode={docMode} onChange={setMode} availableModes={docModes} />
+                    <ModeSwitch
+                      mode={docMode}
+                      onChange={setMode}
+                      availableModes={docModes}
+                    />
                   )}
                   {ownerAvatar}
                   {exportItems && (
-                    <ActionsMenu alwaysVisible label="Document actions" actions={[]}>
+                    <ActionsMenu
+                      alwaysVisible
+                      label="Document actions"
+                      actions={[]}
+                    >
                       {exportItems}
                     </ActionsMenu>
                   )}
@@ -464,7 +494,13 @@ export default function AppHeader() {
   // ----- folder view -----
   if (folder) {
     // Fold the folder's own cap into its edit gate, so a locked folder hides its edit affordances.
-    const folderCanEdit = canEditFolder(project, folder, role, uid, myMemberRole);
+    const folderCanEdit = canEditFolder(
+      project,
+      folder,
+      role,
+      uid,
+      myMemberRole,
+    );
     const items: Crumb[] = [
       projectCrumb,
       {

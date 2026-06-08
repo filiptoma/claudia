@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Bug, Code2, Globe, Layers, Lightbulb, Lock, Plus, StickyNote } from 'lucide-react'
+import { ArrowRight, Bug, Code2, Globe, Layers, Lightbulb, Plus, StickyNote } from 'lucide-react'
 import { useTree } from '../hooks/useTree'
 import { useAuth } from '../context/AuthContext'
 import { useTreeActions } from '../hooks/useTreeActions'
@@ -140,6 +140,8 @@ export default function Home() {
                     key={p.id}
                     icon={<ProjectGlyph project={p} visibility={visibility} />}
                     title={p.name}
+                    projectType={p.type}
+                    accent={visibility === 'public' ? 'blue' : undefined}
                     meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
                     to={projectPath(p.slug)}
                   />
@@ -232,9 +234,8 @@ export default function Home() {
                   key={p.id}
                   icon={<ProjectGlyph project={p} visibility={visibility} />}
                   title={p.name}
-                  titleAccessory={
-                    visibility === 'private' ? <Lock className="size-3 shrink-0 text-muted-foreground/70" /> : undefined
-                  }
+                  projectType={p.type}
+                  accent={visibility === 'public' ? 'blue' : undefined}
                   meta={`${count} ${count === 1 ? 'document' : 'documents'}`}
                   to={projectPath(p.slug)}
                 />
@@ -257,6 +258,8 @@ export default function Home() {
                 key={p.id}
                 icon={<ProjectGlyph project={p} visibility={visibility} />}
                 title={p.name}
+                projectType={p.type}
+                accent="blue"
                 meta={new Date(p.updated_at).toLocaleDateString()}
                 to={projectPath(p.slug)}
               />
