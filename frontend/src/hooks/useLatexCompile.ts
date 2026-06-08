@@ -37,10 +37,8 @@ export interface UseLatexCompile extends LatexCompileState {
   /** Run a compile (no-op-coalesced while one is already running). `draft` → fast single pass; `manual`
    *  marks the Compile button (a full build that auto-requests can neither downgrade nor promote into). */
   compile: (opts?: { draft?: boolean; manual?: boolean }) => void
-  /** The on-open compile policy. The FIRST time a project is ever opened on this browser → one FULL
-   *  build (tracked in localStorage, which survives soft AND hard reloads). EVERY later open → reuse the
-   *  cached PDF if unchanged, otherwise a fast DRAFT — NEVER an automatic full build. The Compile button
-   *  is the only other way to get a full build. So a reload can never trigger a full. */
+  /** On-open policy: reuse the cached PDF when unchanged, otherwise render a fast DRAFT. NEVER a full
+   *  build — a full build happens ONLY when the user clicks Compile. So no open or reload ever fulls. */
   compileIfStale: () => void
   /** Download the last successful PDF as `<project name>.pdf`. */
   download: () => void
@@ -217,40 +215,21 @@ export function useLatexCompile(
   // so reopening/reloading an UNCHANGED project shows the cached PDF with NO recompile. We await the
   // cache load first so the decision is made against the real cached entry, not a not-yet-loaded one.
   const compileIfStale = useCallback(() => {
-    // Start booting the engine the moment the project opens — even when we skip the compile — so the
-    // next edit's draft isn't a cold (~7 s) start (e.g. right after a page reload).
+    // Start booting the engine on open (even when we skip the compile) so the next edit's draft isn't a
+    // cold (~7 s) start right after a reload.
     warmLatexEngine()
     void (async () => {
-      const pid = projectRef.current.id
-      // "First open of this project" is tracked in localStorage — reliable across soft AND hard reloads
-      // (and even where Cache Storage is unavailable, e.g. non-secure dev origins). This is the ONLY
-      // automatic trigger for a FULL build; every later open is at most a draft. The flag is set NOW
-      // (synchronously), so even an immediate reload can't be mistaken for a first open and re-full.
-      const seenKey = `latex:firstcompile:${pid}`
-      let firstOpen: boolean
-      try {
-        firstOpen = localStorage.getItem(seenKey) !== '1'
-        if (firstOpen) localStorage.setItem(seenKey, '1')
-      } catch {
-        firstOpen = false // localStorage unavailable → never auto-full, so a reload can't trigger one
-      }
-
-      if (firstOpen) {
-        if (import.meta.env.DEV) console.debug('[latex] first open of this project — FULL compile')
-        compile({ draft: false })
-        return
-      }
-
-      // Already opened before → NEVER an automatic full build. Reuse the cached PDF when unchanged,
-      // otherwise a fast draft. (A full build now comes only from the Compile button.)
+      // AUTO-COMPILES ARE NEVER A FULL BUILD. A full build (multi-pass, resolves refs/citations) happens
+      // ONLY when the user clicks Compile. On open we reuse the cached PDF when nothing changed, otherwise
+      // render a fast DRAFT — so neither the first open nor any reload can trigger a full.
       const cached = await (cacheLoad.current ?? Promise.resolve(null))
       const sig = signatureRef.current?.() ?? ''
       if (cached && cached.sig && sig && cached.sig === sig) {
-        if (import.meta.env.DEV) console.debug('[latex] reopen — cache HIT, skipping recompile')
+        if (import.meta.env.DEV) console.debug('[latex] cache HIT — skipping recompile')
         return
       }
       if (import.meta.env.DEV) {
-        console.debug(`[latex] reopen — draft recompile (${cached ? 'content changed' : 'no cached PDF'})`)
+        console.debug(`[latex] draft recompile (${cached ? 'content changed' : 'no cached PDF'})`)
       }
       compile({ draft: true })
     })()
