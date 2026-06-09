@@ -23,6 +23,79 @@ One-time setup of the backend. ~10 minutes. You only need a free Supabase accoun
   7. [`0007_security_hardening.sql`](supabase/migrations/0007_security_hardening.sql) — audit
      hardening (lock down the email RPC, media upload limits, email immutability, storage guard, …).
 
+## 2b. Applying migrations to dev + prod (and the grant-drift trap)
+
+This project runs **two** Supabase databases: a **dev** project and a **prod** project (the prod one is
+what Cloudflare Pages points at via `VITE_SUPABASE_URL`). **Every migration must be applied to BOTH**, in
+order. New migrations (0008+) are applied the same way as section 2: paste each file, Run.
+
+**The one rule that prevents the outage below: paste each migration file _verbatim_ from the repo into
+each database. Never hand-copy, never paste a partial selection, never skip "boring" lines.**
+
+### What actually goes wrong (the 0023 incident)
+
+Postgres tables and functions are **deny-by-default** to the `anon` (logged-out) and `authenticated`
+roles. The app's very first migration grants access in bulk:
+
+```sql
+grant select on all tables    in schema public to anon;             -- 0001
+grant execute on all functions in schema public to anon, authenticated;
+```
+
+The trap: **`… on all … in schema public` only covers objects that exist at that moment.** Any table or
+function added in a *later* migration is **not** covered and needs its **own** explicit `grant` line.
+The later migrations include exactly those lines, e.g. in 0023:
+
+```sql
+grant execute on function public.can_view_folder(uuid)   to anon, authenticated;
+grant execute on function public.can_view_document(uuid) to anon, authenticated;
+grant select   on public.resource_grants                 to anon;
+```
+
+If a `grant` line like these gets **dropped during a hand-copy** (or you paste only "the interesting
+part" of a migration), the table/function exists but the role can't touch it. Then:
+
+1. The RLS policy on `folders` calls `can_view_folder(...)`, but `anon` has no **EXECUTE** on it.
+2. Postgres raises `42501 permission denied for function can_view_folder`.
+3. PostgREST returns that as **HTTP 401** on `/rest/v1/folders`.
+4. That read is on the app's boot path, so the whole app sits on an **infinite loader**, even though the
+   table, the policy, and the function all exist and look correct.
+
+It's confusing precisely because "the migration ran fine" and "the table is there" — the only thing
+missing is one `grant` line, and the symptom (401) looks like an auth/login problem, not a permissions
+one. And if you fix it in the **wrong** database (dev when the app is hitting prod, or vice-versa) it
+*stays* broken, because each project has its own independent grants.
+
+### Verify after applying (catches drift in seconds)
+
+Run this in **each** project's SQL editor; every `anon_ok` should be `true`:
+
+```sql
+select 'table:resource_grants'  as obj, has_table_privilege('anon','public.resource_grants','SELECT')::text          as anon_ok
+union all select 'fn:can_view_project',  has_function_privilege('anon','public.can_view_project(uuid)','EXECUTE')::text
+union all select 'fn:can_view_folder',   has_function_privilege('anon','public.can_view_folder(uuid)','EXECUTE')::text
+union all select 'fn:can_view_document', has_function_privilege('anon','public.can_view_document(uuid)','EXECUTE')::text
+union all select 'fn:is_project_owner',  has_function_privilege('anon','public.is_project_owner(uuid)','EXECUTE')::text;
+```
+
+> **Which database is the app hitting?** The `<ref>` in the failing request URL
+> (`https://<ref>.supabase.co/rest/v1/…` in DevTools → Network) is the project to fix. Match it to the
+> `VITE_SUPABASE_URL` in `frontend/.env.development` (local) or Cloudflare Pages env (prod). `[vite]
+> connecting…` in the console means you're on **local dev** → it uses the **dev** DB.
+
+### Recover if a read is 401-ing
+
+Re-run the **current committed** migration file(s) verbatim in the affected project (every migration here
+is idempotent — `create or replace`, `… if not exists`, `drop policy if exists`, repeatable `grant`s — so
+re-running is safe and reconciles whatever drifted). The targeted hotfix for the 0023 case specifically:
+
+```sql
+grant select  on public.resource_grants                  to anon;
+grant execute on function public.can_view_folder(uuid)   to anon, authenticated;
+grant execute on function public.can_view_document(uuid) to anon, authenticated;
+grant execute on function public.is_project_owner(uuid)  to anon, authenticated;
+```
+
 ## 3. Configure auth
 - **Authentication → Providers**:
   - **Email**: enabled by default. (For local testing you may turn **off** "Confirm email" so sign-ups
