@@ -21,9 +21,8 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useIsMobile } from "../hooks/useIsMobile";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
-import { supabase } from "../lib/supabase";
 import { treeKeys, useTree } from "../hooks/useTree";
 import { useTreeActions } from "../hooks/useTreeActions";
 import { useRouteContext } from "../hooks/useRouteContext";
@@ -58,6 +57,10 @@ import type { DocumentRec } from "../lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -70,7 +73,6 @@ import ModeSwitch from "./ModeSwitch";
 import type { Mode } from "./ModeSwitch";
 import { availableModesFor, resolveMode } from "../lib/docMode";
 import SaveIndicator from "./SaveIndicator";
-import ProfileAvatar from "./ProfileAvatar";
 import PresenceAvatars from "./PresenceAvatars";
 import {
   DocIcon,
@@ -87,7 +89,7 @@ export default function AppHeader() {
   const navigate = useNavigate();
   const { role, uid } = useAuth();
   const isMobile = useIsMobile();
-  const { members, folders, documents, grants } = useTree();
+  const { members, folders, grants } = useTree();
   const actions = useTreeActions();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -107,43 +109,6 @@ export default function AppHeader() {
       project ? members.filter((m) => m.project_id === project.id).length : 0,
     [members, project],
   );
-
-  // Fetch the owner's public profile for public projects (shown as avatar on the right of the header).
-  const ownerQuery = useQuery({
-    queryKey: ["public-profile", project?.owner ?? null],
-    enabled: !!(project?.is_public && !project.is_workspace && project.owner),
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      if (!project?.owner) return null;
-      const { data } = await supabase.rpc("get_public_profile", {
-        p_user: project.owner,
-      });
-      return (
-        (
-          data as
-            | { id: string; name: string | null; avatar_url: string | null }[]
-            | null
-        )?.[0] ?? null
-      );
-    },
-  });
-
-  // Owner avatar shown in the header for public projects — hidden on mobile to save space.
-  const ownerAvatar =
-    !isMobile &&
-    project?.is_public &&
-    !project.is_workspace &&
-    project.owner ? (
-      <ProfileAvatar
-        userId={project.owner}
-        name={ownerQuery.data?.name ?? null}
-        email={null}
-        avatarUrl={ownerQuery.data?.avatar_url ?? null}
-        isLoading={ownerQuery.isPending}
-        variant="inline"
-        size="sm"
-      />
-    ) : null;
 
   // The URL's ?mode= is the single source of truth; the resolved mode (defaulting to "view") is
   // computed per-branch from what the user can do — see resolveMode/availableModesFor. setMode writes
@@ -341,12 +306,7 @@ export default function AppHeader() {
 
   // ----- /:project/settings -----
   if (isSettings) {
-    return (
-      <HeaderShell
-        items={[projectCrumb, { label: "Settings" }]}
-        actions={ownerAvatar}
-      />
-    );
+    return <HeaderShell items={[projectCrumb, { label: "Settings" }]} />;
   }
 
   // ----- document view -----
@@ -390,28 +350,50 @@ export default function AppHeader() {
           }
         : undefined,
     });
-    // App-bar menus carry only "Project settings" navigation (managers only) — all access/permission
-    // management lives on the settings page. Rename is still available by clicking the title; delete
-    // lives in the sidebar / file cards.
-    const menu: MenuAction[] = canConfigure
-      ? [
-          {
-            label: "Project settings",
-            icon: <Settings />,
-            onSelect: () => navigate(projectSettingsPath(project.slug)),
-          },
-        ]
-      : [];
-    // Export is available to anyone who can open the document — editors fold it into their actions
-    // menu, while commenters/viewers (who have no other ⋯ items) get an export-only menu. Markdown only:
-    // LaTeX projects compile their own PDF via a separate pipeline.
+    // The app-bar ⋯ is the document's full action menu: rename, project settings (managers), export,
+    // and a destructive Delete pinned last. Permission management still lives only on the settings page.
+    const onDeleteDoc = async () => {
+      if (await actions.deleteDocument(doc))
+        navigate(folder ? folderPath(project.slug, folder.slug) : projectPath(project.slug));
+    };
+    const menu: MenuAction[] = [
+      ...(docCanEdit
+        ? [
+            {
+              label: "Rename",
+              icon: <Pencil />,
+              onSelect: () => void actions.editDocument(doc),
+            } satisfies MenuAction,
+          ]
+        : []),
+      ...(canConfigure
+        ? [
+            {
+              label: "Project settings",
+              icon: <Settings />,
+              separatorBefore: docCanEdit,
+              onSelect: () => navigate(projectSettingsPath(project.slug)),
+            } satisfies MenuAction,
+          ]
+        : []),
+    ];
+    // Export (markdown only — LaTeX compiles its own PDF) and Delete render after the actions above as
+    // menu children, so the destructive Delete always sits last.
     const exportItems = isLatex ? null : (
       <ExportMenuItems
         getContent={() => exportContent(doc.id)}
         title={docLabel(doc)}
-        leadingSeparator={docCanEdit}
+        leadingSeparator={menu.length > 0}
       />
     );
+    const deleteItem = docCanEdit ? (
+      <>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={() => void onDeleteDoc()}>
+          <Trash2 /> Delete
+        </DropdownMenuItem>
+      </>
+    ) : null;
     // "Who else has this open" — signed-in viewers only (logged-out visitors never appear/observe).
     // Shown for editors, commenters and viewers alike; renders nothing when you're alone on the doc.
     const presence = uid ? <PresenceAvatars /> : null;
@@ -430,13 +412,14 @@ export default function AppHeader() {
                     onChange={setMode}
                     availableModes={docModes}
                   />
-                  {(menu.length > 0 || exportItems) && (
+                  {(menu.length > 0 || exportItems || deleteItem) && (
                     <ActionsMenu
                       alwaysVisible
                       label="Document actions"
                       actions={menu}
                     >
                       {exportItems}
+                      {deleteItem}
                     </ActionsMenu>
                   )}
                 </>
@@ -451,13 +434,14 @@ export default function AppHeader() {
                       availableModes={docModes}
                     />
                   )}
-                  {(menu.length > 0 || exportItems) && (
+                  {(menu.length > 0 || exportItems || deleteItem) && (
                     <ActionsMenu
                       alwaysVisible
                       label="Document actions"
                       actions={menu}
                     >
                       {exportItems}
+                      {deleteItem}
                     </ActionsMenu>
                   )}
                 </>
@@ -494,56 +478,57 @@ export default function AppHeader() {
           : undefined,
       },
     ];
-    // Only "Project settings" navigation (managers only); rename via the title, delete via the sidebar/cards.
-    const menu: MenuAction[] = canConfigure
-      ? [
-          {
-            label: "Project settings",
-            icon: <Settings />,
-            onSelect: () => navigate(projectSettingsPath(project.slug)),
-          },
-        ]
-      : [];
-    const folderEmpty = !documents.some((d) => d.folder_id === folder.id);
+    // The app-bar ⋯ is the folder's full action menu: new document, rename, project settings
+    // (managers), and a destructive Delete pinned last. (Rename is also available from the title.)
+    const onDeleteFolder = async () => {
+      if (await actions.deleteFolder(folder)) navigate(projectPath(project.slug));
+    };
+    const menu: MenuAction[] = [
+      ...(folderCanEdit
+        ? [
+            {
+              label: "New document",
+              icon: <FilePlus />,
+              onSelect: async () => {
+                const d = await actions.newDocument(project, folder.id);
+                if (d) navigate(docSplitPath(project.slug, d, folders));
+              },
+            } satisfies MenuAction,
+            {
+              label: "Rename",
+              icon: <Pencil />,
+              onSelect: () => void actions.editFolder(folder),
+            } satisfies MenuAction,
+          ]
+        : []),
+      ...(canConfigure
+        ? [
+            {
+              label: "Project settings",
+              icon: <Settings />,
+              separatorBefore: folderCanEdit,
+              onSelect: () => navigate(projectSettingsPath(project.slug)),
+            } satisfies MenuAction,
+          ]
+        : []),
+      ...(folderCanEdit
+        ? [
+            {
+              label: "Delete",
+              icon: <Trash2 />,
+              danger: true,
+              separatorBefore: true,
+              onSelect: () => void onDeleteFolder(),
+            } satisfies MenuAction,
+          ]
+        : []),
+    ];
     return (
       <HeaderShell
         items={items}
         actions={
-          folderCanEdit || ownerAvatar ? (
-            <>
-              {folderCanEdit && (
-                <>
-                  {!folderEmpty && (
-                    <CreateMenu
-                      compact={isMobile}
-                      actions={[
-                        {
-                          label: "New document",
-                          icon: <FilePlus />,
-                          onSelect: async () => {
-                            const d = await actions.newDocument(
-                              project,
-                              folder.id,
-                            );
-                            if (d)
-                              navigate(docSplitPath(project.slug, d, folders));
-                          },
-                        },
-                      ]}
-                    />
-                  )}
-                  {ownerAvatar}
-                  {menu.length > 0 && (
-                    <ActionsMenu
-                      alwaysVisible
-                      label="Folder actions"
-                      actions={menu}
-                    />
-                  )}
-                </>
-              )}
-              {!folderCanEdit && ownerAvatar}
-            </>
+          menu.length > 0 ? (
+            <ActionsMenu alwaysVisible label="Folder actions" actions={menu} />
           ) : null
         }
       />
@@ -551,90 +536,73 @@ export default function AppHeader() {
   }
 
   // ----- project root view -----
-  // App-bar overflow carries only "Project settings" (managers only). Rename/delete the project from
-  // the sidebar's project-row menu.
-  const overflow: MenuAction[] = canConfigure
-    ? [
-        {
-          label: "Project settings",
-          icon: <Settings />,
-          onSelect: () => navigate(projectSettingsPath(project.slug)),
-        },
-      ]
-    : [];
-
-  // The page body owns the create CTA while a project is empty (one clear call to action), so the
-  // header only carries "New" once there's content. Emptiness mirrors ProjectHome exactly.
-  const rootDocs = documents.filter(
-    (d) => d.project_id === project.id && !d.folder_id && !d.is_quick_note,
-  );
-  const hasFolders = folders.some((f) => f.project_id === project.id);
-  const projectEmpty =
-    !hasFolders &&
-    rootDocs.length === 0 &&
-    (!project.is_workspace || notes.length === 0);
-
+  // The app-bar ⋯ is the project's full action menu: create (document/folder, plus quick note in the
+  // workspace), rename + settings (managers), and a destructive Delete pinned last. The page body still
+  // shows its own prominent CTA while the project is empty; this menu is the persistent action hub.
+  const onDeleteProject = async () => {
+    if (await actions.deleteProject(project)) navigate("/");
+  };
   const goNewDoc = async () => {
     const d = await actions.newDocument(project, null);
     if (d) navigate(docSplitPath(project.slug, d, folders));
   };
-  const createActions: MenuAction[] = project.is_workspace
-    ? [
-        {
-          label: "Quick note",
-          icon: <StickyNote className="text-accent2" />,
-          onSelect: async () => {
-            const n = await actions.newQuickNote();
-            if (n) navigate(noteSplitPath(project.slug, n.slug));
-          },
-        },
-        {
-          label: "Document",
-          icon: <FilePlus />,
-          onSelect: () => void goNewDoc(),
-        },
-        {
-          label: "Folder",
-          icon: <FolderPlus />,
-          onSelect: () => void actions.newFolder(project),
-        },
-      ]
-    : [
-        {
-          label: "Document",
-          icon: <FilePlus />,
-          onSelect: () => void goNewDoc(),
-        },
-        {
-          label: "Folder",
-          icon: <FolderPlus />,
-          onSelect: () => void actions.newFolder(project),
-        },
-      ];
+  const menu: MenuAction[] = [
+    ...(canEdit
+      ? [
+          ...(project.is_workspace
+            ? [
+                {
+                  label: "New quick note",
+                  icon: <StickyNote className="text-accent2" />,
+                  onSelect: async () => {
+                    const n = await actions.newQuickNote();
+                    if (n) navigate(noteSplitPath(project.slug, n.slug));
+                  },
+                } satisfies MenuAction,
+              ]
+            : []),
+          {
+            label: "New document",
+            icon: <FilePlus />,
+            onSelect: () => void goNewDoc(),
+          } satisfies MenuAction,
+          {
+            label: "New folder",
+            icon: <FolderPlus />,
+            onSelect: () => void actions.newFolder(project),
+          } satisfies MenuAction,
+        ]
+      : []),
+    ...(canConfigure
+      ? [
+          {
+            label: "Rename",
+            icon: <Pencil />,
+            separatorBefore: canEdit,
+            onSelect: () => void actions.editProject(project),
+          } satisfies MenuAction,
+          {
+            label: "Project settings",
+            icon: <Settings />,
+            onSelect: () => navigate(projectSettingsPath(project.slug)),
+          } satisfies MenuAction,
+          {
+            label: "Delete",
+            icon: <Trash2 />,
+            danger: true,
+            separatorBefore: true,
+            onSelect: () => void onDeleteProject(),
+          } satisfies MenuAction,
+        ]
+      : []),
+  ];
 
   return (
     <HeaderShell
       items={[projectCrumb]}
       actions={
-        canEdit || ownerAvatar ? (
-          <>
-            {canEdit && (
-              <>
-                {!projectEmpty && (
-                  <CreateMenu actions={createActions} compact={isMobile} />
-                )}
-                {ownerAvatar}
-                {overflow.length > 0 && (
-                  <ActionsMenu
-                    alwaysVisible
-                    label="Project actions"
-                    actions={overflow}
-                  />
-                )}
-              </>
-            )}
-            {!canEdit && ownerAvatar}
-          </>
+        menu.length > 0 ? (
+          <ActionsMenu alwaysVisible label="Project actions" actions={menu} />
         ) : null
       }
     />

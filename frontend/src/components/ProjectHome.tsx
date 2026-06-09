@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FilePlus, FolderPlus, Lock, Pencil, StickyNote, Trash2 } from 'lucide-react'
+import { FilePlus, FolderPlus, Pencil, StickyNote, Trash2 } from 'lucide-react'
 import { warmLatexEngine } from '../lib/latex/compiler'
 import ViewAllCard from './ViewAllCard'
 import { useAuth } from '../context/AuthContext'
@@ -12,11 +12,9 @@ import {
   canEditDocument,
   canEditFolder,
   canEditProject,
-  canSetPermissions,
   documentGrantRole,
   folderGrantRole,
 } from '../lib/access'
-import { usePermissionsDialog } from '../context/PermissionsDialogContext'
 import { docPathFromTree, folderPath, notesPath, noteSplitPath } from '../lib/paths'
 import { docLabel } from '../lib/labels'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
@@ -68,7 +66,6 @@ export default function ProjectHome() {
   const { notes: workspaceNotes } = useQuickNotes()
   const actions = useTreeActions()
   const navigate = useNavigate()
-  const permissions = usePermissionsDialog()
 
   // Warm the LaTeX engine the moment a LaTeX project is opened, so its expensive WASM + TeX Live boot
   // overlaps with browsing the file tree instead of blocking the first compile when a document opens.
@@ -105,66 +102,26 @@ export default function ProjectHome() {
           if (note) navigate(noteSplitPath(project.slug, note.slug))
         }
 
-        // Only the project owner may cap permissions; the cap then hides edit affordances for others.
-        const canPerms = canSetPermissions(project, uid)
+        // Permissions are intentionally NOT offered here: folder/document access is managed only from
+        // the Project settings page, so the card menu never duplicates an affordance that lives there.
         const folderCardMenu = (f: Folder): MenuAction[] => {
           const folderCanEdit = canEditFolder(project, f, role, uid, myMemberRole, folderGrantRole(grants, f.id, uid))
-          return [
-            ...(folderCanEdit
-              ? [
-                  { label: 'New document', icon: <FilePlus />, onSelect: () => void onNewDoc(f.id) },
-                  { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editFolder(f) },
-                ]
-              : []),
-            ...(canPerms
-              ? [
-                  {
-                    label: 'Permissions',
-                    icon: <Lock />,
-                    separatorBefore: true,
-                    onSelect: () =>
-                      permissions.open({
-                        kind: 'folder',
-                        id: f.id,
-                        name: f.name,
-                        projectId: project.id,
-                        accessOverride: f.access_override,
-                        isPrivate: f.is_private,
-                      }),
-                  } satisfies MenuAction,
-                ]
-              : []),
-            ...(folderCanEdit
-              ? [{ label: 'Delete', icon: <Trash2 />, danger: true, separatorBefore: true, onSelect: () => void actions.deleteFolder(f) } satisfies MenuAction]
-              : []),
-          ]
+          return folderCanEdit
+            ? [
+                { label: 'New document', icon: <FilePlus />, onSelect: () => void onNewDoc(f.id) },
+                { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editFolder(f) },
+                { label: 'Delete', icon: <Trash2 />, danger: true, separatorBefore: true, onSelect: () => void actions.deleteFolder(f) },
+              ]
+            : []
         }
         const docCardMenu = (d: DocMeta, folder: Folder | null): MenuAction[] => {
           const docCanEdit = canEditDocument(project, d, folder, role, uid, myMemberRole, documentGrantRole(grants, d, uid))
-          return [
-            ...(docCanEdit ? [{ label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editDocument(d) } satisfies MenuAction] : []),
-            ...(canPerms
-              ? [
-                  {
-                    label: 'Permissions',
-                    icon: <Lock />,
-                    separatorBefore: true,
-                    onSelect: () =>
-                      permissions.open({
-                        kind: 'document',
-                        id: d.id,
-                        name: docLabel(d),
-                        projectId: project.id,
-                        accessOverride: d.access_override,
-                        isPrivate: d.is_private,
-                      }),
-                  } satisfies MenuAction,
-                ]
-              : []),
-            ...(docCanEdit
-              ? [{ label: 'Delete', icon: <Trash2 />, danger: true, separatorBefore: true, onSelect: () => void actions.deleteDocument(d) } satisfies MenuAction]
-              : []),
-          ]
+          return docCanEdit
+            ? [
+                { label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editDocument(d) },
+                { label: 'Delete', icon: <Trash2 />, danger: true, separatorBefore: true, onSelect: () => void actions.deleteDocument(d) },
+              ]
+            : []
         }
 
         const folderCard = (f: Folder) => (
