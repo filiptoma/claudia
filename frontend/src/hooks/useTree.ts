@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { extractStoragePaths, signImages } from '../lib/storage'
-import type { DocumentRec, Folder, Project, ProjectMember } from '../lib/types'
+import type { DocumentRec, Folder, Project, ProjectMember, ResourceGrant } from '../lib/types'
 
 export type DocMeta = Pick<
   DocumentRec,
@@ -13,6 +13,7 @@ export type DocMeta = Pick<
   | 'sort_order'
   | 'is_quick_note'
   | 'access_override'
+  | 'is_private'
   | 'created_at'
   | 'updated_at'
 >
@@ -22,6 +23,7 @@ export const treeKeys = {
   folders: ['folders'] as const,
   documents: ['documents'] as const,
   members: ['members'] as const,
+  grants: ['grants'] as const,
   document: (id: string) => ['document', id] as const,
 }
 
@@ -64,7 +66,7 @@ export function useTree() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('documents')
-        .select('id,title,slug,project_id,folder_id,sort_order,is_quick_note,access_override,created_at,updated_at')
+        .select('id,title,slug,project_id,folder_id,sort_order,is_quick_note,access_override,is_private,created_at,updated_at')
         .order('sort_order')
         .order('title')
       if (error) throw new Error(error.message)
@@ -80,6 +82,17 @@ export function useTree() {
       return data as ProjectMember[]
     },
   })
+  // Private-resource grants the user may read (own grants + every grant on a project they own). Used to
+  // compute the user's tier on a private folder/document and to surface lock indicators. RLS-filtered.
+  const grants = useQuery({
+    queryKey: treeKeys.grants,
+    staleTime: TREE_STALE,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('resource_grants').select('*')
+      if (error) throw new Error(error.message)
+      return data as ResourceGrant[]
+    },
+  })
 
   const refresh = () =>
     Promise.all([
@@ -87,6 +100,7 @@ export function useTree() {
       qc.invalidateQueries({ queryKey: treeKeys.folders }),
       qc.invalidateQueries({ queryKey: treeKeys.documents }),
       qc.invalidateQueries({ queryKey: treeKeys.members }),
+      qc.invalidateQueries({ queryKey: treeKeys.grants }),
     ])
 
   return {
@@ -94,10 +108,12 @@ export function useTree() {
     folders: folders.data ?? [],
     documents: documents.data ?? [],
     members: members.data ?? [],
-    loading: projects.isPending || folders.isPending || documents.isPending || members.isPending,
-    error: (projects.error || folders.error || documents.error || members.error) as Error | null,
+    grants: grants.data ?? [],
+    loading:
+      projects.isPending || folders.isPending || documents.isPending || members.isPending || grants.isPending,
+    error: (projects.error || folders.error || documents.error || members.error || grants.error) as Error | null,
     // Raw query objects for <QuerySuspense> (loading/error gating per section).
-    queries: [projects, folders, documents, members],
+    queries: [projects, folders, documents, members, grants],
     refresh,
   }
 }

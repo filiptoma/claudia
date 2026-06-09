@@ -8,7 +8,14 @@ import { useTree } from '../hooks/useTree'
 import { useTreeActions } from '../hooks/useTreeActions'
 import { useRouteContext } from '../hooks/useRouteContext'
 import { useQuickNotes } from '../hooks/useQuickNotes'
-import { canEditDocument, canEditFolder, canEditProject, canSetPermissions } from '../lib/access'
+import {
+  canEditDocument,
+  canEditFolder,
+  canEditProject,
+  canSetPermissions,
+  documentGrantRole,
+  folderGrantRole,
+} from '../lib/access'
 import { usePermissionsDialog } from '../context/PermissionsDialogContext'
 import { docPathFromTree, folderPath, notesPath, noteSplitPath } from '../lib/paths'
 import { docLabel } from '../lib/labels'
@@ -57,7 +64,7 @@ function NotFound({ slug }: { slug?: string }) {
 export default function ProjectHome() {
   const { project, folder: currentFolder, missing, projectSlug } = useRouteContext()
   const { role, uid } = useAuth()
-  const { folders, documents, members, queries } = useTree()
+  const { folders, documents, members, grants, queries } = useTree()
   const { notes: workspaceNotes } = useQuickNotes()
   const actions = useTreeActions()
   const navigate = useNavigate()
@@ -101,7 +108,7 @@ export default function ProjectHome() {
         // Only the project owner may cap permissions; the cap then hides edit affordances for others.
         const canPerms = canSetPermissions(project, uid)
         const folderCardMenu = (f: Folder): MenuAction[] => {
-          const folderCanEdit = canEditFolder(project, f, role, uid, myMemberRole)
+          const folderCanEdit = canEditFolder(project, f, role, uid, myMemberRole, folderGrantRole(grants, f.id, uid))
           return [
             ...(folderCanEdit
               ? [
@@ -116,7 +123,14 @@ export default function ProjectHome() {
                     icon: <Lock />,
                     separatorBefore: true,
                     onSelect: () =>
-                      permissions.open({ kind: 'folder', id: f.id, name: f.name, accessOverride: f.access_override }),
+                      permissions.open({
+                        kind: 'folder',
+                        id: f.id,
+                        name: f.name,
+                        projectId: project.id,
+                        accessOverride: f.access_override,
+                        isPrivate: f.is_private,
+                      }),
                   } satisfies MenuAction,
                 ]
               : []),
@@ -126,7 +140,7 @@ export default function ProjectHome() {
           ]
         }
         const docCardMenu = (d: DocMeta, folder: Folder | null): MenuAction[] => {
-          const docCanEdit = canEditDocument(project, d, folder, role, uid, myMemberRole)
+          const docCanEdit = canEditDocument(project, d, folder, role, uid, myMemberRole, documentGrantRole(grants, d, uid))
           return [
             ...(docCanEdit ? [{ label: 'Rename', icon: <Pencil />, onSelect: () => void actions.editDocument(d) } satisfies MenuAction] : []),
             ...(canPerms
@@ -136,7 +150,14 @@ export default function ProjectHome() {
                     icon: <Lock />,
                     separatorBefore: true,
                     onSelect: () =>
-                      permissions.open({ kind: 'document', id: d.id, name: docLabel(d), accessOverride: d.access_override }),
+                      permissions.open({
+                        kind: 'document',
+                        id: d.id,
+                        name: docLabel(d),
+                        projectId: project.id,
+                        accessOverride: d.access_override,
+                        isPrivate: d.is_private,
+                      }),
                   } satisfies MenuAction,
                 ]
               : []),

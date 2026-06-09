@@ -17,6 +17,7 @@ import UserProfilePage from './components/UserProfilePage'
 import PublicProjectsPage from './components/PublicProjectsPage'
 import BugPage from './components/BugPage'
 import RequestPage from './components/RequestPage'
+import InvitePage from './components/InvitePage'
 import { FullPageSpinner } from './components/ui/spinner'
 import { useAuth } from './context/AuthContext'
 import { fetchDocument, treeKeys, useTree } from './hooks/useTree'
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="/users/:userId" element={<UserProfilePage />} />
             <Route path="/bug" element={<BugPage />} />
             <Route path="/request" element={<RequestPage />} />
+            <Route path="/invite/:token" element={<InvitePage />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/projects" element={<AdminProjects />} />

@@ -45,6 +45,8 @@ import {
   canEditFolder,
   canEditProject,
   canSetPermissions,
+  documentGrantRole,
+  folderGrantRole,
   projectVisibility,
 } from "../lib/access";
 import { usePermissionsDialog } from "../context/PermissionsDialogContext";
@@ -91,7 +93,7 @@ export default function Sidebar({
   } = useRouteContext();
   const { user, uid, role, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const { folders, documents, members, refresh } = useTree();
+  const { folders, documents, members, grants, refresh } = useTree();
   const { notes: quickNotes } = useQuickNotes();
   const { id: activeNoteId } = useParams();
   const actions = useTreeActions();
@@ -183,9 +185,11 @@ export default function Sidebar({
     const active = activeDoc?.id === d.id;
     const Icon = d.is_quick_note ? QuickNoteIcon : DocIcon;
     const folderSlug = folder?.slug ?? null;
+    const isPrivate = d.is_private || !!folder?.is_private;
     // A "view only" / "comment only" lock (on the doc OR its folder) hides rename/delete here too (the
     // DB enforces it regardless; this just doesn't dangle affordances that would fail).
-    const docEditable = editable && canEditDocument(p, d, folder, role, uid, myRole.get(p.id));
+    const docEditable =
+      editable && canEditDocument(p, d, folder, role, uid, myRole.get(p.id), documentGrantRole(grants, d, uid));
     const menu: MenuAction[] = [
       {
         label: "Rename",
@@ -203,7 +207,9 @@ export default function Sidebar({
                   kind: "document",
                   id: d.id,
                   name: docLabel(d),
+                  projectId: p.id,
                   accessOverride: d.access_override,
+                  isPrivate: d.is_private,
                 }),
             } satisfies MenuAction,
           ]
@@ -239,6 +245,9 @@ export default function Sidebar({
             )}
           />
           <span className="min-w-0 flex-1 truncate">{docLabel(d)}</span>
+          {isPrivate && (
+            <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="Private" />
+          )}
         </Link>
         {docEditable && !isMobile && <ActionsMenu actions={menu} />}
       </div>
@@ -260,7 +269,8 @@ export default function Sidebar({
           const folderDocs = documents.filter((d) => d.folder_id === f.id);
           const folderActive = activeFolder?.id === f.id;
           // A locked folder hides its edit affordances for non-owners (DB enforces it regardless).
-          const folderEditable = editable && canEditFolder(p, f, role, uid, myRole.get(p.id));
+          const folderEditable =
+            editable && canEditFolder(p, f, role, uid, myRole.get(p.id), folderGrantRole(grants, f.id, uid));
           const menu: MenuAction[] = [
             {
               label: "New document",
@@ -283,7 +293,9 @@ export default function Sidebar({
                         kind: "folder",
                         id: f.id,
                         name: f.name,
+                        projectId: p.id,
                         accessOverride: f.access_override,
+                        isPrivate: f.is_private,
                       }),
                   } satisfies MenuAction,
                 ]
@@ -336,6 +348,9 @@ export default function Sidebar({
                     )}
                   />
                   <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                  {f.is_private && (
+                    <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="Private" />
+                  )}
                 </Link>
                 {folderEditable && !isMobile && <ActionsMenu actions={menu} />}
               </div>

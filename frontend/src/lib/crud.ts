@@ -8,11 +8,14 @@ import type {
   CommentThread,
   DocumentRec,
   Folder,
+  InviteLink,
   MemberInfo,
   MemberRole,
   MentionableUser,
   Project,
   ProjectType,
+  RedeemResult,
+  ResourceGrantInfo,
   SuggestionMessage,
   SuggestionThread,
 } from './types'
@@ -206,6 +209,112 @@ export async function setFolderAccessOverride(
   override: MemberRole | null,
 ): Promise<void> {
   await update('folders', folderId, { access_override: override })
+}
+
+// ---- private resources & invite links (migrations 0023 + 0024) ----
+// Marking a folder/document private hides it from everyone except the owner and explicit grantees.
+// Owner-only — the protect_*_privacy triggers enforce it server-side.
+
+export async function setFolderPrivate(folderId: string, isPrivate: boolean): Promise<void> {
+  await update('folders', folderId, { is_private: isPrivate })
+}
+
+export async function setDocumentPrivate(documentId: string, isPrivate: boolean): Promise<void> {
+  await update('documents', documentId, { is_private: isPrivate })
+}
+
+// The grantees of a private folder/document, resolved with profile info (owner-only RPC — the profiles
+// table itself isn't readable). Pass exactly one of folderId / documentId.
+export async function listResourceGrants(target: {
+  folderId?: string
+  documentId?: string
+}): Promise<ResourceGrantInfo[]> {
+  const { data, error } = await supabase.rpc('list_resource_grants', {
+    p_folder: target.folderId ?? null,
+    p_document: target.documentId ?? null,
+  })
+  if (error) throw new Error(error.message)
+  return (data as ResourceGrantInfo[] | null) ?? []
+}
+
+// Directly grant/upsert a known user onto a private resource (owner-only via RLS). Used by the
+// member-pick path on PRIVATE projects; for PUBLIC projects, grants are created by redeeming a link.
+export async function setResourceGrant(
+  target: { projectId: string; folderId?: string; documentId?: string },
+  userId: string,
+  role: MemberRole,
+): Promise<void> {
+  const { error } = await supabase.from('resource_grants').upsert(
+    {
+      project_id: target.projectId,
+      folder_id: target.folderId ?? null,
+      document_id: target.documentId ?? null,
+      user_id: userId,
+      role,
+    },
+    { onConflict: target.folderId ? 'folder_id,user_id' : 'document_id,user_id' },
+  )
+  if (error) throw new Error(error.message)
+}
+
+export async function removeResourceGrant(
+  target: { folderId?: string; documentId?: string },
+  userId: string,
+): Promise<void> {
+  let q = supabase.from('resource_grants').delete().eq('user_id', userId)
+  q = target.folderId ? q.eq('folder_id', target.folderId) : q.eq('document_id', target.documentId as string)
+  const { error } = await q
+  if (error) throw new Error(error.message)
+}
+
+// Create a share link (manager-only RPC). The raw token is returned ONCE here; build the URL from it.
+// folderId/documentId both omitted = a whole-project link (for private projects, incl. LaTeX).
+export async function createInviteLink(args: {
+  projectId: string
+  folderId?: string | null
+  documentId?: string | null
+  role: MemberRole
+  expiresAt?: string | null
+  maxUses?: number | null
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_invite_link', {
+    p_project: args.projectId,
+    p_folder: args.folderId ?? null,
+    p_document: args.documentId ?? null,
+    p_role: args.role,
+    p_expires_at: args.expiresAt ?? null,
+    p_max_uses: args.maxUses ?? null,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+// List a project's invite links (manager-only via RLS). Pass a resource filter to scope to one folder/doc.
+export async function listInviteLinks(
+  projectId: string,
+  target?: { folderId?: string | null; documentId?: string | null },
+): Promise<InviteLink[]> {
+  let q = supabase.from('invite_links').select('*').eq('project_id', projectId).order('created_at')
+  if (target?.folderId) q = q.eq('folder_id', target.folderId)
+  else if (target?.documentId) q = q.eq('document_id', target.documentId)
+  const { data, error } = await q
+  if (error) throw new Error(error.message)
+  return (data as InviteLink[] | null) ?? []
+}
+
+export async function revokeInviteLink(id: string): Promise<void> {
+  const { error } = await supabase.from('invite_links').update({ revoked: true }).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+// Redeem a share link as the signed-in user. Returns the target's slugs so the caller can redirect to
+// the resource it just unlocked; throws a human-readable message on invalid/revoked/expired/used links.
+export async function redeemInvite(token: string): Promise<RedeemResult> {
+  const { data, error } = await supabase.rpc('redeem_invite', { p_token: token })
+  if (error) throw new Error(error.message)
+  const row = (data as RedeemResult[] | null)?.[0]
+  if (!row) throw new Error('This invite link is invalid')
+  return row
 }
 
 // Resolve a typed email to a mention target (members always; anyone on a public project). Returns

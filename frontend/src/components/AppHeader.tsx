@@ -10,7 +10,6 @@ import {
   FilePlus,
   FlaskConical,
   FolderPlus,
-  Lock,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
@@ -35,7 +34,8 @@ import {
   canEditDocument,
   canEditFolder,
   canEditProject,
-  canSetPermissions,
+  documentGrantRole,
+  folderGrantRole,
   projectVisibility,
 } from "../lib/access";
 import {
@@ -55,7 +55,6 @@ import CreateMenu from "./CreateMenu";
 import ExportMenuItems from "./ExportMenuItems";
 import { readLiveDoc } from "../lib/liveDoc";
 import type { DocumentRec } from "../lib/types";
-import { usePermissionsDialog } from "../context/PermissionsDialogContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -72,6 +71,7 @@ import type { Mode } from "./ModeSwitch";
 import { availableModesFor, resolveMode } from "../lib/docMode";
 import SaveIndicator from "./SaveIndicator";
 import ProfileAvatar from "./ProfileAvatar";
+import PresenceAvatars from "./PresenceAvatars";
 import {
   DocIcon,
   FolderGlyph,
@@ -87,13 +87,12 @@ export default function AppHeader() {
   const navigate = useNavigate();
   const { role, uid } = useAuth();
   const isMobile = useIsMobile();
-  const { members, folders, documents } = useTree();
+  const { members, folders, documents, grants } = useTree();
   const actions = useTreeActions();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const params = useParams();
   const { workspace, notes, findNote } = useQuickNotes();
-  const permissions = usePermissionsDialog();
   const qc = useQueryClient();
 
   // Source for the app-bar Export menu (markdown docs + quick notes): the live editor content when its
@@ -357,12 +356,13 @@ export default function AppHeader() {
     // LaTeX is project-level only — edit = project edit, no commenter tier (§3.4), so docModes resolves
     // to [view, split, edit] for editors and [view] for viewers, with no comment affordances.
     const isLatex = isLatexProject;
+    const docGrant = documentGrantRole(grants, doc, uid);
     const docCanEdit = isLatex
       ? canEditProject(project, role, uid, myMemberRole)
-      : canEditDocument(project, doc, folder, role, uid, myMemberRole);
+      : canEditDocument(project, doc, folder, role, uid, myMemberRole, docGrant);
     const docCanComment = isLatex
       ? false
-      : canCommentDocument(project, doc, folder, role, uid, myMemberRole);
+      : canCommentDocument(project, doc, folder, role, uid, myMemberRole, docGrant);
     // Mode comes from the URL, clamped to what this user/device allows. When the URL omits it, LaTeX
     // lands editors in split and viewers in view (§3.x); markdown keeps the universal "view" default.
     const docModes = availableModesFor(docCanEdit, docCanComment, isMobile);
@@ -390,44 +390,18 @@ export default function AppHeader() {
           }
         : undefined,
     });
-    const menu: MenuAction[] = [
-      {
-        label: "Rename",
-        icon: <Pencil />,
-        onSelect: () => void actions.editDocument(doc),
-      },
-      // Only the project owner may cap a single document's permissions.
-      ...(canSetPermissions(project, uid)
-        ? [
-            {
-              label: "Permissions",
-              icon: <Lock />,
-              separatorBefore: true,
-              onSelect: () =>
-                permissions.open({
-                  kind: "document",
-                  id: doc.id,
-                  name: docLabel(doc),
-                  accessOverride: doc.access_override,
-                }),
-            } satisfies MenuAction,
-          ]
-        : []),
-      {
-        label: "Delete",
-        icon: <Trash2 />,
-        danger: true,
-        separatorBefore: true,
-        onSelect: async () => {
-          if (await actions.deleteDocument(doc))
-            navigate(
-              folder
-                ? folderPath(project.slug, folder.slug)
-                : projectPath(project.slug),
-            );
-        },
-      },
-    ];
+    // App-bar menus carry only "Project settings" navigation (managers only) — all access/permission
+    // management lives on the settings page. Rename is still available by clicking the title; delete
+    // lives in the sidebar / file cards.
+    const menu: MenuAction[] = canConfigure
+      ? [
+          {
+            label: "Project settings",
+            icon: <Settings />,
+            onSelect: () => navigate(projectSettingsPath(project.slug)),
+          },
+        ]
+      : [];
     // Export is available to anyone who can open the document — editors fold it into their actions
     // menu, while commenters/viewers (who have no other ⋯ items) get an export-only menu. Markdown only:
     // LaTeX projects compile their own PDF via a separate pipeline.
@@ -438,12 +412,18 @@ export default function AppHeader() {
         leadingSeparator={docCanEdit}
       />
     );
+    // "Who else has this open" — signed-in viewers only (logged-out visitors never appear/observe).
+    // Shown for editors, commenters and viewers alike; renders nothing when you're alone on the doc.
+    const presence = uid ? (
+      <PresenceAvatars docId={doc.id} projectId={doc.project_id} />
+    ) : null;
     return (
       <HeaderShell
         items={items}
         actions={
-          docCanEdit || docCanComment || exportItems || ownerAvatar ? (
+          presence || docCanEdit || docCanComment || exportItems || ownerAvatar ? (
             <>
+              {presence}
               {docCanEdit ? (
                 <>
                   <SaveIndicator />
@@ -453,13 +433,15 @@ export default function AppHeader() {
                     onChange={setMode}
                     availableModes={docModes}
                   />
-                  <ActionsMenu
-                    alwaysVisible
-                    label="Document actions"
-                    actions={menu}
-                  >
-                    {exportItems}
-                  </ActionsMenu>
+                  {(menu.length > 0 || exportItems) && (
+                    <ActionsMenu
+                      alwaysVisible
+                      label="Document actions"
+                      actions={menu}
+                    >
+                      {exportItems}
+                    </ActionsMenu>
+                  )}
                 </>
               ) : (
                 <>
@@ -473,11 +455,11 @@ export default function AppHeader() {
                     />
                   )}
                   {ownerAvatar}
-                  {exportItems && (
+                  {(menu.length > 0 || exportItems) && (
                     <ActionsMenu
                       alwaysVisible
                       label="Document actions"
-                      actions={[]}
+                      actions={menu}
                     >
                       {exportItems}
                     </ActionsMenu>
@@ -500,6 +482,7 @@ export default function AppHeader() {
       role,
       uid,
       myMemberRole,
+      folderGrantRole(grants, folder.id, uid),
     );
     const items: Crumb[] = [
       projectCrumb,
@@ -515,40 +498,16 @@ export default function AppHeader() {
           : undefined,
       },
     ];
-    const menu: MenuAction[] = [
-      {
-        label: "Rename folder",
-        icon: <Pencil />,
-        onSelect: () => void actions.editFolder(folder),
-      },
-      // Only the project owner may cap a folder's permissions (covers the folder + its documents).
-      ...(canSetPermissions(project, uid)
-        ? [
-            {
-              label: "Permissions",
-              icon: <Lock />,
-              separatorBefore: true,
-              onSelect: () =>
-                permissions.open({
-                  kind: "folder",
-                  id: folder.id,
-                  name: folder.name,
-                  accessOverride: folder.access_override,
-                }),
-            } satisfies MenuAction,
-          ]
-        : []),
-      {
-        label: "Delete folder",
-        icon: <Trash2 />,
-        danger: true,
-        separatorBefore: true,
-        onSelect: async () => {
-          if (await actions.deleteFolder(folder))
-            navigate(projectPath(project.slug));
-        },
-      },
-    ];
+    // Only "Project settings" navigation (managers only); rename via the title, delete via the sidebar/cards.
+    const menu: MenuAction[] = canConfigure
+      ? [
+          {
+            label: "Project settings",
+            icon: <Settings />,
+            onSelect: () => navigate(projectSettingsPath(project.slug)),
+          },
+        ]
+      : [];
     const folderEmpty = !documents.some((d) => d.folder_id === folder.id);
     return (
       <HeaderShell
@@ -578,11 +537,13 @@ export default function AppHeader() {
                     />
                   )}
                   {ownerAvatar}
-                  <ActionsMenu
-                    alwaysVisible
-                    label="Folder actions"
-                    actions={menu}
-                  />
+                  {menu.length > 0 && (
+                    <ActionsMenu
+                      alwaysVisible
+                      label="Folder actions"
+                      actions={menu}
+                    />
+                  )}
                 </>
               )}
               {!folderCanEdit && ownerAvatar}
@@ -594,25 +555,14 @@ export default function AppHeader() {
   }
 
   // ----- project root view -----
+  // App-bar overflow carries only "Project settings" (managers only). Rename/delete the project from
+  // the sidebar's project-row menu.
   const overflow: MenuAction[] = canConfigure
     ? [
         {
-          label: "Rename project",
-          icon: <Pencil />,
-          onSelect: () => void actions.editProject(project),
-        },
-        {
-          label: "Settings",
+          label: "Project settings",
           icon: <Settings />,
           onSelect: () => navigate(projectSettingsPath(project.slug)),
-        },
-        {
-          label: "Delete project",
-          icon: <Trash2 />,
-          danger: true,
-          onSelect: async () => {
-            if (await actions.deleteProject(project)) navigate("/");
-          },
         },
       ]
     : [];
@@ -678,11 +628,13 @@ export default function AppHeader() {
                   <CreateMenu actions={createActions} compact={isMobile} />
                 )}
                 {ownerAvatar}
-                <ActionsMenu
-                  alwaysVisible
-                  label="Project actions"
-                  actions={overflow}
-                />
+                {overflow.length > 0 && (
+                  <ActionsMenu
+                    alwaysVisible
+                    label="Project actions"
+                    actions={overflow}
+                  />
+                )}
               </>
             )}
             {!canEdit && ownerAvatar}

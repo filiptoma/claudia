@@ -8,9 +8,12 @@ export const STORAGE_PREFIX = 'storage:'
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10 MB
 
-// Upload to the PRIVATE media bucket under the project's folder. Returns the object path,
-// which we store in markdown as `storage:<path>` and resolve to a signed URL at render time.
-export async function uploadImage(projectId: string, file: File): Promise<string> {
+// Upload to the PRIVATE media bucket under `{projectId}/{documentId}/` — the document segment lets the
+// storage RLS gate the image on the DOCUMENT's access (so a private doc's images aren't readable by
+// other project members, and a private-resource editor-grantee can still upload). Returns the object
+// path, stored in markdown as `storage:<path>` and resolved to a signed URL at render time. Legacy
+// 2-segment paths ({projectId}/file) stay project-gated — see migration 0025.
+export async function uploadImage(projectId: string, documentId: string, file: File): Promise<string> {
   // Fail fast with a clear message; the bucket re-enforces both checks server-side.
   if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
     throw new Error('Only PNG, JPEG, GIF, WebP, or AVIF images can be uploaded.')
@@ -19,7 +22,7 @@ export async function uploadImage(projectId: string, file: File): Promise<string
     throw new Error('Image is too large (max 10 MB).')
   }
   const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '')
-  const path = `${projectId}/${crypto.randomUUID()}.${ext}`
+  const path = `${projectId}/${documentId}/${crypto.randomUUID()}.${ext}`
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
     contentType: file.type || 'application/octet-stream',
     upsert: false,

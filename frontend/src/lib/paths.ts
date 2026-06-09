@@ -55,6 +55,11 @@ export const publicProjectsPath = (params?: { owner?: string; search?: string })
 
 export const userProfilePath = (userId: string) => `/users/${userId}`
 
+// Invite-link redemption route. inviteUrl returns the absolute URL to share (token in the path).
+export const invitePath = (token: string) => `/invite/${encodeURIComponent(token)}`
+export const inviteUrl = (token: string) =>
+  typeof window !== 'undefined' ? `${window.location.origin}${invitePath(token)}` : invitePath(token)
+
 // Path that opens a document straight into split (edit + preview) mode — used right after creating a
 // document or quick note so the author lands in the editor, not the read-only view.
 export const docSplitPath = (

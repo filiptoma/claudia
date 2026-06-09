@@ -76,6 +76,10 @@ export interface Folder {
   /** Per-folder permission cap for everyone except the owner — caps the folder AND its documents.
    *  NULL = inherit. See migration 0020 and [[DocumentRec.access_override]]. */
   access_override: MemberRole | null
+  /** Private folder (Discord private-channel model, markdown only — migration 0023): hidden from
+   *  everyone except the owner and users with a `resource_grants` row on it. Orthogonal to the
+   *  access_override cap; when true, the grant role (not the project role/cap) defines access. */
+  is_private: boolean
   sort_order: number
 }
 
@@ -94,6 +98,10 @@ export interface DocumentRec {
    * 'viewer' makes the document read-only for non-owners. Enforced in the DB (see migration 0018).
    */
   access_override: MemberRole | null
+  /** Private document (markdown only — migration 0023): hidden from everyone except the owner and
+   *  users granted access to it (or to its parent folder). A doc inside a private folder is private
+   *  too, even with is_private=false. Orthogonal to the access_override cap; privacy supersedes it. */
+  is_private: boolean
   sort_order: number
   created_at: string
   updated_at: string
@@ -104,6 +112,60 @@ export interface MemberInfo {
   user_id: string
   name: string | null
   email: string | null
+  role: MemberRole
+}
+
+// ---- private-resource grants & invite links (migrations 0023 + 0024) ----
+
+// A row of resource_grants the current user can read (their own grants + every grant on a project they
+// own). Exactly one of folder_id / document_id is set. Used to compute the user's tier on a private
+// folder/document; the DB is the real gate.
+export interface ResourceGrant {
+  id: string
+  project_id: string
+  folder_id: string | null
+  document_id: string | null
+  user_id: string
+  role: MemberRole
+  created_by: string | null
+  created_at: string
+}
+
+// A grantee resolved with profile info (from the list_resource_grants RPC — owner-only).
+export interface ResourceGrantInfo {
+  user_id: string
+  name: string | null
+  email: string | null
+  avatar_url: string | null
+  role: MemberRole
+  created_at: string
+}
+
+// A share link the manager can read (RLS manager-only). folder_id/document_id both null = whole-project
+// invite. The raw `token` is only returned by create_invite_link and re-read here for re-display.
+export interface InviteLink {
+  id: string
+  token: string
+  project_id: string
+  folder_id: string | null
+  document_id: string | null
+  role: MemberRole
+  created_by: string | null
+  expires_at: string | null
+  max_uses: number | null
+  uses: number
+  revoked: boolean
+  created_at: string
+}
+
+// The result of redeeming an invite link (from redeem_invite) — slugs let the caller redirect to the
+// target it just unlocked.
+export interface RedeemResult {
+  project_id: string
+  project_slug: string | null
+  folder_slug: string | null
+  document_slug: string | null
+  kind: 'project' | 'folder' | 'document'
   role: MemberRole
 }
 

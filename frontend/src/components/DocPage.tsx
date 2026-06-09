@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTree } from '../hooks/useTree'
 import { useRouteContext } from '../hooks/useRouteContext'
-import { canCommentDocument, canEditDocument, canEditProject } from '../lib/access'
+import { canCommentDocument, canEditDocument, canEditProject, documentGrantRole } from '../lib/access'
 import { docLabel } from '../lib/labels'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { APP_NAME } from '../lib/brand'
@@ -12,24 +12,26 @@ import DocumentBody from './DocumentBody'
 export default function DocPage() {
   const { project, folder, doc: meta } = useRouteContext()
   const { role, uid } = useAuth()
-  const { members } = useTree()
+  const { members, grants } = useTree()
 
   const myMemberRole = project
     ? members.find((m) => m.project_id === project.id && m.user_id === uid)?.role
     : undefined
-  // Markdown: effective access folds in the document's cap AND its parent folder's cap (0018/0020).
-  // LaTeX: access is project-level only — edit = project edit, and there's no commenter tier (§3.4).
+  // On a private document/folder, the effective tier comes from the user's grant (0023).
+  const grant = meta ? documentGrantRole(grants, meta, uid) : null
+  // Markdown: effective access folds in the document's cap AND its parent folder's cap (0018/0020),
+  // or the grant when the doc/folder is private. LaTeX: project-level only, no commenter tier (§3.4).
   const canEdit =
     project && meta
       ? project.type === 'latex'
         ? canEditProject(project, role, uid, myMemberRole)
-        : canEditDocument(project, meta, folder, role, uid, myMemberRole)
+        : canEditDocument(project, meta, folder, role, uid, myMemberRole, grant)
       : false
   const canComment =
     project?.type === 'latex'
       ? false
       : project && meta
-        ? canCommentDocument(project, meta, folder, role, uid, myMemberRole)
+        ? canCommentDocument(project, meta, folder, role, uid, myMemberRole, grant)
         : false
 
   // Tab title is the document's own title (covers regular docs and quick notes alike).

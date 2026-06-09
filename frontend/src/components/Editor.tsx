@@ -490,7 +490,7 @@ export default function Editor({
         selection: { anchor: at + token.length },
       });
       try {
-        const path = await uploadImage(doc.project_id, file);
+        const path = await uploadImage(doc.project_id, doc.id, file);
         const alt = file.name.replace(/\.[^.]+$/, "");
         const md = `![${alt}](storage:${path})`;
         const idx = view.state.doc.toString().indexOf(token);
