@@ -84,12 +84,23 @@ export function useTree() {
   })
   // Private-resource grants the user may read (own grants + every grant on a project they own). Used to
   // compute the user's tier on a private folder/document and to surface lock indicators. RLS-filtered.
+  //
+  // This is SUPPLEMENTARY enrichment, not core to boot — the app's spine is projects/folders/documents/
+  // members. So if the read fails (a pending migration, a missing anon/authenticated grant, a transient
+  // blip) we degrade to "no grants" rather than throwing: a thrown error here would otherwise block the
+  // whole-app boot gate (App.tsx `tree.loading`) or blank a QuerySuspense section. Worst case without a
+  // grant is that a private resource looks locked until the read recovers — far better than hanging the
+  // entire app behind the spinner. (Lesson from the 0023 anon-grant incident: one missing GRANT on this
+  // one table took the whole tree down.)
   const grants = useQuery({
     queryKey: treeKeys.grants,
     staleTime: TREE_STALE,
     queryFn: async () => {
       const { data, error } = await supabase.from('resource_grants').select('*')
-      if (error) throw new Error(error.message)
+      if (error) {
+        console.warn('[useTree] resource_grants read failed; degrading to no grants:', error.message)
+        return [] as ResourceGrant[]
+      }
       return data as ResourceGrant[]
     },
   })
