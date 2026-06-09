@@ -70,20 +70,26 @@ export function usePresence(docId: string | null, projectId: string | null) {
       .on('presence', { event: 'join' }, sync)
       .on('presence', { event: 'leave' }, sync)
 
-    void (async () => {
-      // Private channels need the auth JWT on the realtime socket before subscribe.
-      await supabase.realtime.setAuth()
-      channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          void channel.track({ uid, joinedAt: Date.now() } satisfies TrackPayload)
-        }
-      })
-    })()
+    // No explicit supabase.realtime.setAuth() here: supabase-js already keeps the realtime socket's JWT
+    // current (it calls setAuth on SIGNED_IN / TOKEN_REFRESHED), so the private channel carries the
+    // token automatically. Calling setAuth() on mount forces EVERY joined channel to re-auth and rejoin
+    // — and StrictMode runs this effect twice per mount, on each window — which made presence flicker in
+    // and out as the channels churned. Just subscribe.
+    channel.subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        void channel.track({ uid, joinedAt: Date.now() } satisfies TrackPayload)
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        // Most likely the realtime.messages RLS policies (migration 0026) aren't applied, so the private
+        // channel is rejected. Surface it instead of failing silently (no avatars, no clue).
+        console.warn(`[presence] doc:${docId} channel ${status}`, err ?? '')
+      }
+    })
 
     return () => {
       cancelled = true
       setRaw([]) // drop the prior doc's viewers so a doc switch doesn't flash stale avatars
-      void channel.untrack()
+      // removeChannel() unsubscribes AND untracks; calling untrack() too is a redundant second "leave"
+      // that widens the subscribe/teardown race under StrictMode's mount→unmount→mount.
       void supabase.removeChannel(channel)
     }
   }, [docId, uid])
