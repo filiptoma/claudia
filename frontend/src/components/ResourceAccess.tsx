@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Copy, LinkIcon, Lock, Trash2, UserPlus } from 'lucide-react'
 import {
   createInviteLink,
+  findUserByEmail,
   listInviteLinks,
   listProjectMembers,
   listResourceGrants,
@@ -15,6 +16,7 @@ import { inviteUrl } from '../lib/paths'
 import { toast } from '../lib/toast'
 import type { InviteLink, MemberInfo, MemberRole, Project, ResourceGrantInfo } from '../lib/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -90,6 +92,7 @@ function GranteesManager({ project, t, onChanged }: { project: Project; t: Resou
   const [members, setMembers] = useState<MemberInfo[] | null>(null)
   const [addUser, setAddUser] = useState('')
   const [addRole, setAddRole] = useState<MemberRole>('viewer')
+  const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
 
   const reload = useCallback(() => {
@@ -118,9 +121,42 @@ function GranteesManager({ project, t, onChanged }: { project: Project; t: Resou
   const grantedIds = new Set((grantees ?? []).map((g) => g.user_id))
   const candidates = (members ?? []).filter((m) => !grantedIds.has(m.user_id))
 
+  const inviteByEmail = () =>
+    void guard(async () => {
+      const u = await findUserByEmail(email.trim())
+      if (!u) throw new Error('No user found with that email — they need to sign up first.')
+      await setResourceGrant({ projectId: project.id, ...target(t) }, u.id, addRole)
+      setEmail('')
+      toast('success', `Invited ${u.name || u.email}`)
+    })
+
   return (
     <div className="flex flex-col gap-2">
-      {/* Private projects: pick from existing members. Public projects grant via link only. */}
+      {/* Public projects: invite any signed-up user by email (the DB allows granting anyone). */}
+      {project.is_public && (
+        <div className="flex items-center gap-2">
+          <Input
+            type="email"
+            placeholder="email@example.com"
+            value={email}
+            disabled={busy}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && email.trim()) {
+                e.preventDefault()
+                inviteByEmail()
+              }
+            }}
+            className="min-w-0 flex-1"
+          />
+          <RoleSelect value={addRole} onChange={setAddRole} disabled={busy} />
+          <Button disabled={busy || !email.trim()} onClick={inviteByEmail}>
+            <UserPlus /> Invite
+          </Button>
+        </div>
+      )}
+
+      {/* Private projects: pick from existing members. */}
       {!project.is_public && candidates.length > 0 && (
         <div className="flex items-center gap-2">
           <Select value={addUser} onValueChange={setAddUser} disabled={busy}>
@@ -155,7 +191,7 @@ function GranteesManager({ project, t, onChanged }: { project: Project; t: Resou
         {!grantees && <div className="p-3 text-center text-sm text-muted-foreground">Loading…</div>}
         {grantees && grantees.length === 0 && (
           <div className="p-3 text-center text-sm text-muted-foreground">
-            No one has access yet{project.is_public ? ' — share a link below.' : '.'}
+            No one has access yet{project.is_public ? ' — invite someone above or share a link.' : '.'}
           </div>
         )}
         {grantees?.map((g) => (
