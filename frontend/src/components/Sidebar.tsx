@@ -44,12 +44,10 @@ import {
   canEditDocument,
   canEditFolder,
   canEditProject,
-  canSetPermissions,
   documentGrantRole,
   folderGrantRole,
   projectVisibility,
 } from "../lib/access";
-import { usePermissionsDialog } from "../context/PermissionsDialogContext";
 import {
   docPath,
   docSplitPath,
@@ -99,7 +97,6 @@ export default function Sidebar({
   const actions = useTreeActions();
   const navigate = useNavigate();
   const { collapsed: sidebarCollapsed } = useSidebar();
-  const permissions = usePermissionsDialog();
 
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -190,30 +187,14 @@ export default function Sidebar({
     // DB enforces it regardless; this just doesn't dangle affordances that would fail).
     const docEditable =
       editable && canEditDocument(p, d, folder, role, uid, myRole.get(p.id), documentGrantRole(grants, d, uid));
+    // Permissions are intentionally NOT here: folder/document access is managed only from the Project
+    // settings page, so the sidebar menu doesn't offer a shortcut that lives in two places.
     const menu: MenuAction[] = [
       {
         label: "Rename",
         icon: <Pencil />,
         onSelect: () => void actions.editDocument(d),
       },
-      ...(canSetPermissions(p, uid)
-        ? [
-            {
-              label: "Permissions",
-              icon: <Lock />,
-              separatorBefore: true,
-              onSelect: () =>
-                permissions.open({
-                  kind: "document",
-                  id: d.id,
-                  name: docLabel(d),
-                  projectId: p.id,
-                  accessOverride: d.access_override,
-                  isPrivate: d.is_private,
-                }),
-            } satisfies MenuAction,
-          ]
-        : []),
       {
         label: "Delete",
         icon: <Trash2 />,
@@ -282,24 +263,7 @@ export default function Sidebar({
               icon: <Pencil />,
               onSelect: () => void actions.editFolder(f),
             },
-            ...(canSetPermissions(p, uid)
-              ? [
-                  {
-                    label: "Permissions",
-                    icon: <Lock />,
-                    separatorBefore: true,
-                    onSelect: () =>
-                      permissions.open({
-                        kind: "folder",
-                        id: f.id,
-                        name: f.name,
-                        projectId: p.id,
-                        accessOverride: f.access_override,
-                        isPrivate: f.is_private,
-                      }),
-                  } satisfies MenuAction,
-                ]
-              : []),
+            // Permissions live only on the Project settings page (see the doc menu above).
             {
               label: "Delete",
               icon: <Trash2 />,
