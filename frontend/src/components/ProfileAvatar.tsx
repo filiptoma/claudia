@@ -78,7 +78,7 @@ export function AvatarCircle({
     return (
       <span
         className={cn(
-          'shrink-0 inline-flex items-center justify-center rounded-full bg-muted ring-1 ring-border',
+          'shrink-0 select-none inline-flex items-center justify-center rounded-full bg-muted ring-1 ring-border',
           sizeClass,
         )}
       >
@@ -91,7 +91,7 @@ export function AvatarCircle({
     return (
       <span
         className={cn(
-          'shrink-0 overflow-hidden rounded-full ring-1 ring-border',
+          'shrink-0 select-none overflow-hidden rounded-full ring-1 ring-border',
           sizeClass,
           'inline-flex items-center justify-center',
         )}
@@ -104,7 +104,7 @@ export function AvatarCircle({
   return (
     <span
       className={cn(
-        'shrink-0 inline-flex items-center justify-center rounded-full font-semibold text-white',
+        'shrink-0 select-none inline-flex items-center justify-center rounded-full font-semibold text-white',
         sizeClass,
         bg,
       )}

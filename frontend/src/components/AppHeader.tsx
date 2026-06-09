@@ -421,13 +421,12 @@ export default function AppHeader() {
       <HeaderShell
         items={items}
         actions={
-          presence || docCanEdit || docCanComment || exportItems || ownerAvatar ? (
+          presence || docCanEdit || docCanComment || exportItems ? (
             <>
               {presence}
               {docCanEdit ? (
                 <>
                   <SaveIndicator />
-                  {ownerAvatar}
                   <ModeSwitch
                     mode={docMode}
                     onChange={setMode}
@@ -454,7 +453,6 @@ export default function AppHeader() {
                       availableModes={docModes}
                     />
                   )}
-                  {ownerAvatar}
                   {(menu.length > 0 || exportItems) && (
                     <ActionsMenu
                       alwaysVisible

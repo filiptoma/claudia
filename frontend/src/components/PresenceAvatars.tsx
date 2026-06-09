@@ -41,7 +41,7 @@ export default function PresenceAvatars({ docId, projectId }: { docId: string; p
         {overflow > 0 && (
           <span
             className={cn(
-              'inline-flex size-7 items-center justify-center rounded-full bg-muted text-[0.7rem] font-semibold text-muted-foreground ring-2 ring-background',
+              'inline-flex size-7 select-none items-center justify-center rounded-full bg-muted text-[0.7rem] font-semibold text-muted-foreground ring-2 ring-background',
             )}
           >
             +{overflow}
