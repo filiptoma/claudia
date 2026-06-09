@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import AppHeader from './AppHeader'
 import { SidebarContext } from '../context/SidebarContext'
 import { AnnotationRailContext } from '../context/AnnotationRailContext'
+import { PresenceProvider } from '../context/PresenceContext'
 
 // Shell shared by every route: a full-width app bar (logo + sidebar toggle + breadcrumbs + actions)
 // on top, with the collapsible sidebar and the scrollable <Outlet> below it. The sidebar's collapsed
@@ -25,29 +26,34 @@ export default function AppLayout() {
   const rail = useMemo(() => ({ slot: railSlot }), [railSlot])
 
   return (
-    <SidebarContext.Provider value={sidebar}>
-      <AnnotationRailContext.Provider value={rail}>
-        <div className="flex h-full flex-col overflow-hidden">
-          <AppHeader />
-          <div className="flex min-h-0 flex-1">
-            <Sidebar drawerOpen={drawerOpen} onCloseDrawer={() => setDrawerOpen(false)} />
-            {drawerOpen && (
-              <div
-                className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] md:hidden"
-                onClick={() => setDrawerOpen(false)}
-              />
-            )}
-            <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <Outlet />
-              </div>
-            </main>
-            {/* Docked comments/suggestions rail mounts here (portaled by the document page). Empty —
-                hence zero width — on every other route and when the rail is closed. */}
-            <div ref={setRailSlot} className="flex shrink-0" />
+    // PresenceProvider wraps the whole shell so the header (avatar stack) and the routed document
+    // (co-editing gate) share ONE presence subscription. It re-renders only when presence changes, and
+    // since this subtree is passed as its `children`, only the context consumers below re-render.
+    <PresenceProvider>
+      <SidebarContext.Provider value={sidebar}>
+        <AnnotationRailContext.Provider value={rail}>
+          <div className="flex h-full flex-col overflow-hidden">
+            <AppHeader />
+            <div className="flex min-h-0 flex-1">
+              <Sidebar drawerOpen={drawerOpen} onCloseDrawer={() => setDrawerOpen(false)} />
+              {drawerOpen && (
+                <div
+                  className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] md:hidden"
+                  onClick={() => setDrawerOpen(false)}
+                />
+              )}
+              <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <Outlet />
+                </div>
+              </main>
+              {/* Docked comments/suggestions rail mounts here (portaled by the document page). Empty —
+                  hence zero width — on every other route and when the rail is closed. */}
+              <div ref={setRailSlot} className="flex shrink-0" />
+            </div>
           </div>
-        </div>
-      </AnnotationRailContext.Provider>
-    </SidebarContext.Provider>
+        </AnnotationRailContext.Provider>
+      </SidebarContext.Provider>
+    </PresenceProvider>
   )
 }

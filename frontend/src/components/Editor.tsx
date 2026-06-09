@@ -51,6 +51,7 @@ import { useTheme } from "../context/ThemeContext";
 import { toast } from "../lib/toast";
 import { cn } from "@/lib/utils";
 import { registerLiveDoc } from "../lib/liveDoc";
+import { useCollab } from "../lib/collab/useCollab";
 import { cmChrome, cmLightContrast } from "../lib/cmTheme";
 import Markdown from "./Markdown";
 import EditorToolbar from "./EditorToolbar";
@@ -230,8 +231,6 @@ export default function Editor({
     setToolbarOpen(!isMobile);
   }
 
-  // Captured once (state initializer) so CodeMirror's value never resets on cache updates.
-  const [initialValue] = useState(doc.content);
   const latest = useRef(doc.content);
   const dirty = useRef(false);
   // Tracks the last externally-applied content so we only reset CodeMirror on real outside changes
@@ -260,10 +259,21 @@ export default function Editor({
   // would defeat SourceEditor's memo and rebuild the editor.
   const [cmView, setCmView] = useState<EditorView | null>(null);
   const [previewEl, setPreviewEl] = useState<HTMLDivElement | null>(null);
-  const handleCreateEditor = useCallback(
-    (view: EditorView) => setCmView(view),
-    [],
-  );
+  // Last caret offset + focus, tracked live so we can restore them when CodeMirror remounts on a collab
+  // transition (entering/leaving a co-editing session swaps the editor's underlying model). null until
+  // the user has interacted, so the very first mount isn't force-positioned.
+  const lastHeadRef = useRef<number | null>(null);
+  const lastFocusRef = useRef(false);
+  const handleCreateEditor = useCallback((view: EditorView) => {
+    setCmView(view);
+    const head = lastHeadRef.current;
+    if (head != null) {
+      view.dispatch({
+        selection: { anchor: Math.min(head, view.state.doc.length) },
+      });
+      if (lastFocusRef.current) view.focus();
+    }
+  }, []);
   useMarkdownScrollSync(showPreview, cmView, previewEl);
 
   // Slash flow state. Stage 1 (`slash`) is the in-document command menu — a passive overlay; focus
@@ -297,35 +307,48 @@ export default function Editor({
   const cmTheme: Extension =
     theme === "dark" ? materialDark : [materialLight, cmLightContrast];
 
+  // Write a content string to the DB and keep the caches fresh. Shared by the normal autosave (below)
+  // and the co-editing leader (useCollab), which is the single writer of the merged text during a
+  // session. Throws on failure so callers can react (autosave re-marks dirty; collab retries next tick).
+  const persistContent = useCallback(
+    async (content: string): Promise<void> => {
+      useSaveStatus.getState().set({ status: "saving" });
+      const { data, error } = await supabase
+        .from("documents")
+        .update({ content })
+        .eq("id", doc.id)
+        .select()
+        .single();
+      if (error) {
+        useSaveStatus.getState().set({ status: "error" });
+        throw error;
+      }
+      qc.setQueryData(treeKeys.document(doc.id), data); // keep cache fresh without a refetch
+      // Also bump updated_at in the tree list so listings (e.g. the quick-notes page, which sorts by
+      // it) reflect the edit immediately instead of after a manual refresh.
+      const updatedAt = (data as DocumentRec).updated_at;
+      if (updatedAt) {
+        qc.setQueryData<DocMeta[]>(treeKeys.documents, (old) =>
+          old?.map((d) =>
+            d.id === doc.id ? { ...d, updated_at: updatedAt } : d,
+          ),
+        );
+      }
+      useSaveStatus.getState().set({ status: "saved", savedAt: new Date() });
+    },
+    [doc.id, qc],
+  );
+
   const doSave = useCallback(async () => {
     if (!dirty.current) return;
     const content = latest.current;
     dirty.current = false;
-    useSaveStatus.getState().set({ status: "saving" });
-    const { data, error } = await supabase
-      .from("documents")
-      .update({ content })
-      .eq("id", doc.id)
-      .select()
-      .single();
-    if (error) {
-      dirty.current = true;
-      useSaveStatus.getState().set({ status: "error" });
-      return;
+    try {
+      await persistContent(content);
+    } catch {
+      dirty.current = true; // persistContent already set status: "error"; let a later flush retry
     }
-    qc.setQueryData(treeKeys.document(doc.id), data); // keep cache fresh without a refetch
-    // Also bump updated_at in the tree list so listings (e.g. the quick-notes page, which sorts by
-    // it) reflect the edit immediately instead of after a manual refresh.
-    const updatedAt = (data as DocumentRec).updated_at;
-    if (updatedAt) {
-      qc.setQueryData<DocMeta[]>(treeKeys.documents, (old) =>
-        old?.map((d) =>
-          d.id === doc.id ? { ...d, updated_at: updatedAt } : d,
-        ),
-      );
-    }
-    useSaveStatus.getState().set({ status: "saved", savedAt: new Date() });
-  }, [doc.id, qc]);
+  }, [persistContent]);
 
   // Surface autosave status in the app bar; register the retry handler and clear it on unmount.
   useEffect(() => {
@@ -342,6 +365,31 @@ export default function Editor({
   // ref, so this getter stays current without re-registering on every keystroke.
   useEffect(() => registerLiveDoc(doc.id, () => latest.current), [doc.id]);
 
+  // ---- Realtime co-editing (Phase 2) ----
+  // Opens a Yjs broadcast session only when ≥2 people are present AND this user is a real editor
+  // (commenters suggest instead, so they're excluded). Solo editing keeps the normal autosave path and
+  // opens no channel. While a session is active Yjs owns the document; the elected leader is the single
+  // writer back to the DB (both the CRDT blob and documents.content, via persistContent).
+  const collab = useCollab({
+    docId: doc.id,
+    enabled: !suggestionMode,
+    getLocalText: () => latest.current,
+    persistContent,
+  });
+  // CodeMirror is remounted (keyed) when a collab session starts/ends: solo CM owns plain text, but a
+  // session hands ownership to Yjs. Remounting builds the new editor state atomically from the right
+  // initial doc (the merged Y.Text on entry, the live text on exit) with the right extensions, instead
+  // of hot-swapping and risking a doc/CRDT mismatch. The value is snapshotted ONLY at (re)mount — it
+  // must not track the doc during a session, or the controlled value would fight Yjs.
+  const cmMode = collab.active ? "collab" : "solo";
+  /* eslint-disable react-hooks/refs -- latest.current is read once, as the remount snapshot, by design */
+  const cmInitialValue = useMemo(
+    () => (collab.active && collab.ytext ? collab.ytext.toString() : latest.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cmMode],
+  );
+  /* eslint-enable react-hooks/refs */
+
   const handleChange = useCallback(
     (val: string) => {
       latest.current = val;
@@ -350,6 +398,10 @@ export default function Editor({
         setPreview(val);
         onContentChange?.(val);
       }, 150);
+      // During collab the change may be local OR a peer's edit applied by Yjs; either way we keep
+      // latest/preview current (export + this user's preview stay correct) but DON'T autosave here —
+      // persistence is the leader's job (useCollab), so N editors don't all write at once.
+      if (collab.active) return;
       if (suggestionMode) {
         // Don't save; track the edit diff for the suggestion panel instead.
         setPendingEdit(computeEditCapture(doc.content, val));
@@ -359,7 +411,7 @@ export default function Editor({
       window.clearTimeout(saveTimer.current);
       saveTimer.current = window.setTimeout(() => void doSave(), 800);
     },
-    [doSave, onContentChange, suggestionMode, doc.content],
+    [doSave, onContentChange, suggestionMode, doc.content, collab.active],
   );
 
   // Revert editor to saved content and clear the pending suggestion.
@@ -445,6 +497,9 @@ export default function Editor({
     if (
       dirty.current ||
       pendingEdit ||
+      // While co-editing, Yjs owns the document — a cache update (incl. the leader's own write) must
+      // never dispatch into CodeMirror, or it would fight the CRDT.
+      collab.active ||
       view.state.doc.toString() === doc.content
     )
       return;
@@ -452,7 +507,7 @@ export default function Editor({
       changes: { from: 0, to: view.state.doc.length, insert: doc.content },
     });
     setPreview(doc.content);
-  }, [doc.content, pendingEdit]);
+  }, [doc.content, pendingEdit, collab.active]);
 
   // Flush on tab close (keepalive PATCH straight to PostgREST) and on unmount.
   useEffect(() => {
@@ -648,6 +703,8 @@ export default function Editor({
           ? { bottom: suggestionMarginRef.current }
           : null,
       ),
+      // Reads refs (lastHead/lastFocus) at event time, not during render — false positive.
+      // eslint-disable-next-line react-hooks/refs
       EditorView.updateListener.of((u) => {
         if (u.selectionSet || u.docChanged || u.focusChanged) {
           // Image and table contexts are mutually exclusive; the image toolbar takes precedence.
@@ -655,6 +712,9 @@ export default function Editor({
           setInImage(!!img);
           setImageWidth(img?.width ?? null);
           setInTable(img ? false : isInTable(u.view));
+          // Track caret + focus so a collab remount can restore them.
+          lastHeadRef.current = u.state.selection.main.head;
+          lastFocusRef.current = u.view.hasFocus;
         }
       }),
       // Custom slash reference menu: this high-priority keymap drives the overlay while it's open
@@ -713,8 +773,12 @@ export default function Editor({
           return false;
         },
       }),
+      // Realtime co-editing: the yCollab binding (remote cursors/selections + Yjs sync + scoped undo).
+      // Non-null only while a session is active; the editor remounts on that transition (see the key on
+      // SourceEditor), so this is built into a fresh editor state rather than hot-swapped mid-session.
+      ...(collab.extension ? [collab.extension] : []),
     ],
-    [uploadAndInsert, syncSlash],
+    [uploadAndInsert, syncSlash, collab.extension],
   );
 
   // Toolbar "@" button: insert a `/` at the caret and open the reference menu explicitly.
@@ -924,8 +988,9 @@ export default function Editor({
             )}
           </div>
           <SourceEditor
+            key={cmMode}
             cmRef={cmRef}
-            value={initialValue}
+            value={cmInitialValue}
             theme={cmTheme}
             extensions={extensions}
             onChange={handleChange}

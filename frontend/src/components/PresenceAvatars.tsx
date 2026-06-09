@@ -1,6 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { usePresence } from '../hooks/usePresence'
+import { usePresenceContext } from '../context/PresenceContext'
 import { AvatarCircle } from './ProfileAvatar'
 
 // Max avatars rendered before collapsing the rest into a "+N" chip.
@@ -9,10 +9,11 @@ const MAX_SHOWN = 4
 /**
  * Overlapping avatar stack of the OTHER users currently viewing this document (self is excluded — your
  * own presence is already implied by the header profile menu). Renders nothing when you're alone, so a
- * solo reader sees no chrome. Subscribes via usePresence → the private `doc:<id>` channel (RLS-gated).
+ * solo reader sees no chrome. Reads the shared presence subscription (PresenceProvider → the private
+ * `doc:<id>` channel, RLS-gated) — the same one the editor's co-editing gate uses.
  */
-export default function PresenceAvatars({ docId, projectId }: { docId: string; projectId: string }) {
-  const { users } = usePresence(docId, projectId)
+export default function PresenceAvatars() {
+  const { users } = usePresenceContext()
   const others = users.filter((u) => !u.isSelf)
   if (others.length === 0) return null
 

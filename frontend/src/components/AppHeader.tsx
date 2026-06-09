@@ -414,9 +414,7 @@ export default function AppHeader() {
     );
     // "Who else has this open" — signed-in viewers only (logged-out visitors never appear/observe).
     // Shown for editors, commenters and viewers alike; renders nothing when you're alone on the doc.
-    const presence = uid ? (
-      <PresenceAvatars docId={doc.id} projectId={doc.project_id} />
-    ) : null;
+    const presence = uid ? <PresenceAvatars /> : null;
     return (
       <HeaderShell
         items={items}
