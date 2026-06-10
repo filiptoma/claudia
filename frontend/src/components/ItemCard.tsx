@@ -19,6 +19,7 @@ export default function ItemCard({
   menu = [],
   accent = 'default',
   className,
+  reordering = false,
 }: {
   icon: ReactNode
   title: string
@@ -30,6 +31,8 @@ export default function ItemCard({
   /** Icon-chip tint. 'indigo' = quick notes, 'blue' = public projects, default = warm muted. */
   accent?: 'default' | 'indigo' | 'blue'
   className?: string
+  /** Touch "Change order" mode: suppress navigation + hide the ⋯ so the card is a pure drag target. */
+  reordering?: boolean
 }) {
   const hasMenu = menu.length > 0
   return (
@@ -37,7 +40,8 @@ export default function ItemCard({
       className={cn(
         // transform-gpu keeps the whole card on one compositing layer so its text translates smoothly
         // with the frame on hover (otherwise the title re-rasterizes each frame and appears to lag).
-        'group relative transform-gpu rounded-xl transition-transform duration-150 ease-out hover:-translate-y-0.5',
+        'group relative transform-gpu rounded-xl transition-transform duration-150 ease-out',
+        !reordering && 'hover:-translate-y-0.5',
         className,
       )}
     >
@@ -47,7 +51,7 @@ export default function ItemCard({
           'flex h-full w-full items-center gap-3.5 rounded-xl border border-border bg-card p-4 shadow-sm transition-colors',
           'group-hover:border-primary/50 group-hover:shadow-md',
           'group-focus-within:border-primary/50 group-focus-within:shadow-md',
-          hasMenu && 'pr-12',
+          (hasMenu || reordering) && 'pr-12',
         )}
       >
         <span
@@ -80,14 +84,17 @@ export default function ItemCard({
         className={cn(
           'absolute inset-0 rounded-xl',
           'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+          // While reordering (touch), the card is a pure drag target — the grip overlays this corner.
+          reordering && 'pointer-events-none',
         )}
-        tabIndex={0}
+        tabIndex={reordering ? -1 : 0}
+        aria-hidden={reordering || undefined}
       >
         <span className="sr-only">{title}</span>
       </Link>
 
-      {/* Action menu floats above the stretched link */}
-      {hasMenu && (
+      {/* Action menu floats above the stretched link (hidden while reordering — the grip takes its spot) */}
+      {hasMenu && !reordering && (
         <div className="absolute top-1/2 right-2 -translate-y-1/2 z-1">
           <ActionsMenu actions={menu} />
         </div>

@@ -7,6 +7,8 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
+  ArrowUpDown,
+  Check,
   FilePlus,
   FlaskConical,
   FolderPlus,
@@ -21,6 +23,8 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { useIsTouch } from "../hooks/useIsTouch";
+import { useReorderMode } from "../lib/reorderMode";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
 import { treeKeys, useTree } from "../hooks/useTree";
@@ -89,6 +93,9 @@ export default function AppHeader() {
   const navigate = useNavigate();
   const { role, uid } = useAuth();
   const isMobile = useIsMobile();
+  const isTouch = useIsTouch();
+  const reorderActive = useReorderMode((s) => s.active);
+  const toggleReorder = useReorderMode((s) => s.toggle);
   const { members, folders, grants } = useTree();
   const actions = useTreeActions();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -270,6 +277,19 @@ export default function AppHeader() {
   )?.role;
   const canEdit = canEditProject(project, role, uid, myMemberRole);
   const canConfigure = canConfigureProject(project, role, uid);
+  // Touch-only "Change order" toggle for the ⋯ on project/folder pages: flips the global reorder mode
+  // that turns cards/sidebar rows into drag handles. Non-touch devices reorder by dragging directly, so
+  // they never see it. `gate` is the relevant edit permission (the folder's, or the project's).
+  const reorderItems = (gate: boolean): MenuAction[] =>
+    isTouch && gate
+      ? [
+          {
+            label: reorderActive ? "Done reordering" : "Change order",
+            icon: reorderActive ? <Check /> : <ArrowUpDown />,
+            onSelect: () => toggleReorder(),
+          },
+        ]
+      : [];
   const isSettings = location.pathname === projectSettingsPath(project.slug);
   const visibility = projectVisibility(project, memberCount);
 
@@ -484,6 +504,7 @@ export default function AppHeader() {
       if (await actions.deleteFolder(folder)) navigate(projectPath(project.slug));
     };
     const menu: MenuAction[] = [
+      ...reorderItems(folderCanEdit),
       ...(folderCanEdit
         ? [
             {
@@ -547,6 +568,7 @@ export default function AppHeader() {
     if (d) navigate(docSplitPath(project.slug, d, folders));
   };
   const menu: MenuAction[] = [
+    ...reorderItems(canEdit),
     ...(canEdit
       ? [
           ...(project.is_workspace

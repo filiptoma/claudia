@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import AppHeader from './AppHeader'
 import { SidebarContext } from '../context/SidebarContext'
 import { AnnotationRailContext } from '../context/AnnotationRailContext'
 import { PresenceProvider } from '../context/PresenceContext'
+import { useReorderMode } from '../lib/reorderMode'
 
 // Shell shared by every route: a full-width app bar (logo + sidebar toggle + breadcrumbs + actions)
 // on top, with the collapsible sidebar and the scrollable <Outlet> below it. The sidebar's collapsed
@@ -15,6 +16,13 @@ export default function AppLayout() {
   // The document page portals its docked comments/suggestions rail into this in-flow slot (a flex
   // sibling of <main>), so the rail shifts content aside like the nav sidebar instead of floating.
   const [railSlot, setRailSlot] = useState<HTMLDivElement | null>(null)
+  // Leave touch "Change order" mode on every navigation, so it never lingers onto a different page than
+  // the one where it was switched on.
+  const location = useLocation()
+  const resetReorder = useReorderMode((s) => s.set)
+  useEffect(() => {
+    resetReorder(false)
+  }, [location.pathname, resetReorder])
   const sidebar = useMemo(
     () => ({
       collapsed,

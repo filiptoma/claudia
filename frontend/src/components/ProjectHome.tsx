@@ -29,6 +29,14 @@ import { DocIcon, FolderGlyph, WorkspaceIcon } from './EntityIcons'
 import type { MenuAction } from './ActionsMenu'
 import type { DocMeta } from '../hooks/useTree'
 import type { Folder } from '../lib/types'
+import { rectSortingStrategy } from '@dnd-kit/sortable'
+import { cn } from '@/lib/utils'
+import { useIsTouch } from '../hooks/useIsTouch'
+import { useReorder } from '../hooks/useReorder'
+import { useReorderMode } from '../lib/reorderMode'
+import Reorderable from './dnd/Reorderable'
+import SortableItem from './dnd/SortableItem'
+import DragGrip from './dnd/DragGrip'
 
 // Wider, 3-up grid so longer titles wrap to two lines instead of truncating.
 const GRID = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'
@@ -59,6 +67,48 @@ function NotFound({ slug }: { slug?: string }) {
   )
 }
 
+// One reorderable grid cell. Non-touch: the whole cell is the drag surface (a 5px move starts a drag, a
+// click still opens the card). Touch reorder mode: the card stops navigating and a grip on the right is
+// the drag surface, so the list still scrolls. Disabled: a plain passthrough with no drag affordance.
+function SortableCard({
+  id,
+  enabled,
+  touchReorder,
+  children,
+}: {
+  id: string
+  enabled: boolean
+  touchReorder: boolean
+  children: ReactNode
+}) {
+  return (
+    <SortableItem id={id} disabled={!enabled}>
+      {({ setNodeRef, listeners, style, isDragging }) => (
+        <div
+          ref={setNodeRef}
+          style={style}
+          {...(enabled && !touchReorder ? listeners : {})}
+          className={cn(
+            'relative rounded-xl',
+            enabled && !touchReorder && 'cursor-grab active:cursor-grabbing',
+            // While dragging, the real cell is an invisible placeholder holding the slot — the lifted copy
+            // is the DragOverlay — so the list reflows cleanly and there's no drop flash.
+            isDragging && 'opacity-0',
+          )}
+        >
+          {children}
+          {touchReorder && (
+            <DragGrip
+              listeners={listeners}
+              className="absolute top-1/2 right-2 z-2 size-9 -translate-y-1/2 rounded-md bg-background/80 shadow-sm ring-1 ring-border"
+            />
+          )}
+        </div>
+      )}
+    </SortableItem>
+  )
+}
+
 export default function ProjectHome() {
   const { project, folder: currentFolder, missing, projectSlug } = useRouteContext()
   const { role, uid } = useAuth()
@@ -66,6 +116,9 @@ export default function ProjectHome() {
   const { notes: workspaceNotes } = useQuickNotes()
   const actions = useTreeActions()
   const navigate = useNavigate()
+  const isTouch = useIsTouch()
+  const reorderActive = useReorderMode((s) => s.active)
+  const reorder = useReorder()
 
   // Warm the LaTeX engine the moment a LaTeX project is opened, so its expensive WASM + TeX Live boot
   // overlaps with browsing the file tree instead of blocking the first compile when a document opens.
@@ -86,6 +139,11 @@ export default function ProjectHome() {
         const myMemberRole = members.find((m) => m.project_id === project.id && m.user_id === uid)?.role
         const canEdit = canEditProject(project, role, uid, myMemberRole)
         const isWorkspace = project.is_workspace
+        // Drag-to-reorder is for editors only: always available on non-touch (drag a card directly), and
+        // on touch only while "Change order" mode is on. touchReorder additionally swaps each card's
+        // tap-to-open + ⋯ for a grip handle.
+        const dndEnabled = canEdit && (!isTouch || reorderActive)
+        const touchReorder = isTouch && reorderActive && canEdit
 
         const projectFolders = folders.filter((f) => f.project_id === project.id)
         // Quick notes are excluded from a project's documents — they live under /notes.
@@ -124,24 +182,51 @@ export default function ProjectHome() {
             : []
         }
 
-        const folderCard = (f: Folder) => (
+        // Card visuals — shared by the grid cell (wrapped in SortableCard) and the drag overlay, so the
+        // lifted copy matches exactly what you grabbed.
+        const folderCardEl = (f: Folder, reordering: boolean) => (
           <EntityCard
-            key={f.id}
             icon={<FolderGlyph />}
             title={f.name}
             meta={`${docCount(f.id)} ${docCount(f.id) === 1 ? 'document' : 'documents'}`}
             to={folderPath(project.slug, f.slug)}
             menu={folderCardMenu(f)}
+            reordering={reordering}
           />
         )
-        const docCard = (d: DocMeta, folder: Folder | null = null) => (
+        const docCardEl = (d: DocMeta, folder: Folder | null, reordering: boolean) => (
           <EntityCard
-            key={d.id}
             icon={<DocIcon />}
             title={docLabel(d)}
             to={docPathFromTree(project.slug, d, folders)}
             menu={docCardMenu(d, folder)}
+            reordering={reordering}
           />
+        )
+
+        // A reorderable grid for one sibling list (folders, or documents in a folder/root). Reorderable
+        // owns the order and renders each cell via renderItem; the overlay reuses the same card visual
+        // (sans grip) as the lifted copy. With dnd off it just renders the plain grid.
+        const sortableGrid = <T extends { id: string; sort_order: number }>(
+          table: 'folders' | 'documents',
+          items: T[],
+          renderEl: (item: T, reordering: boolean) => ReactNode,
+        ) => (
+          <div className={GRID}>
+            <Reorderable
+              items={items}
+              strategy={rectSortingStrategy}
+              enabled={dndEnabled}
+              touch={isTouch}
+              onReorder={(ordered) => void reorder(table, ordered)}
+              renderItem={(it) => (
+                <SortableCard key={it.id} id={it.id} enabled={dndEnabled} touchReorder={touchReorder}>
+                  {renderEl(it, touchReorder)}
+                </SortableCard>
+              )}
+              renderOverlay={(it) => <div className="cursor-grabbing">{renderEl(it, false)}</div>}
+            />
+          </div>
         )
 
         // ---- folder view ----
@@ -162,7 +247,7 @@ export default function ProjectHome() {
                   }
                 />
               ) : (
-                <div className={GRID}>{folderDocs.map((d) => docCard(d, currentFolder))}</div>
+                sortableGrid('documents', folderDocs, (d, r) => docCardEl(d, currentFolder, r))
               )}
             </PageLayout>
           )
@@ -199,8 +284,8 @@ export default function ProjectHome() {
                 />
               ) : (
                 <div className="flex flex-col gap-9">
-                  {projectFolders.length > 0 && <Section title="Folders"><div className={GRID}>{projectFolders.map(folderCard)}</div></Section>}
-                  {files.length > 0 && <Section title="Files"><div className={GRID}>{files.map((d) => docCard(d))}</div></Section>}
+                  {projectFolders.length > 0 && <Section title="Folders">{sortableGrid('folders', projectFolders, folderCardEl)}</Section>}
+                  {files.length > 0 && <Section title="Files">{sortableGrid('documents', files, (d, r) => docCardEl(d, null, r))}</Section>}
                   {workspaceNotes.length > 0 && (
                     <Section title="Quick notes">
                       <div className={GRID}>
@@ -241,8 +326,8 @@ export default function ProjectHome() {
               />
             ) : (
               <div className="flex flex-col gap-9">
-                {projectFolders.length > 0 && <Section title="Folders"><div className={GRID}>{projectFolders.map(folderCard)}</div></Section>}
-                {rootDocs.length > 0 && <Section title="Documents"><div className={GRID}>{rootDocs.map((d) => docCard(d))}</div></Section>}
+                {projectFolders.length > 0 && <Section title="Folders">{sortableGrid('folders', projectFolders, folderCardEl)}</Section>}
+                {rootDocs.length > 0 && <Section title="Documents">{sortableGrid('documents', rootDocs, (d, r) => docCardEl(d, null, r))}</Section>}
               </div>
             )}
           </PageLayout>

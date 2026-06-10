@@ -76,6 +76,33 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Folder, MemberRole, Project, Visibility } from "../lib/types";
+import { verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useIsTouch } from "../hooks/useIsTouch";
+import { useReorder } from "../hooks/useReorder";
+import { useReorderMode } from "../lib/reorderMode";
+import Reorderable from "./dnd/Reorderable";
+import SortableItem from "./dnd/SortableItem";
+import DragGrip from "./dnd/DragGrip";
+
+// Floating previews shown under the cursor while dragging a sidebar row (the real row goes invisible).
+// Kept simple — icon + label on an opaque, lifted surface — so the drop animation lands cleanly.
+function folderOverlay(f: Folder) {
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-sidebar px-2 py-1.5 text-sm text-sidebar-foreground shadow-lg ring-1 ring-sidebar-border">
+      <FolderGlyph className="size-3.75 shrink-0 text-muted-foreground" />
+      <span className="truncate">{f.name}</span>
+    </div>
+  );
+}
+function docOverlay(d: DocMeta) {
+  const Icon = d.is_quick_note ? QuickNoteIcon : DocIcon;
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-sidebar px-2 py-1.5 text-sm text-sidebar-foreground shadow-lg ring-1 ring-sidebar-border">
+      <Icon className="size-3.75 shrink-0 text-muted-foreground" />
+      <span className="truncate">{docLabel(d)}</span>
+    </div>
+  );
+}
 
 export default function Sidebar({
   drawerOpen,
@@ -99,6 +126,9 @@ export default function Sidebar({
   const { collapsed: sidebarCollapsed } = useSidebar();
 
   const isMobile = useIsMobile();
+  const isTouch = useIsTouch();
+  const reorderActive = useReorderMode((s) => s.active);
+  const reorder = useReorder();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showLogin, setShowLogin] = useState(false);
 
@@ -203,35 +233,53 @@ export default function Sidebar({
         onSelect: () => void onDeleteDoc(p, d),
       },
     ];
+    // Drag to reorder: always on non-touch (drag the row, a click still opens it), and in touch "Change
+    // order" mode otherwise — which swaps tap-to-open + ⋯ for a grip handle.
+    const dndOn = editable && (!isTouch || reorderActive);
+    const touchReorder = isTouch && reorderActive && editable;
     return (
-      <div
-        key={d.id}
-        className={cn(
-          "group flex items-center gap-1 rounded-md pr-1 transition-colors",
-          active ? "bg-primary/15" : "hover:bg-sidebar-accent",
-        )}
-      >
-        <Link
-          to={docPath(p.slug, folderSlug, d.slug)}
-          onClick={onCloseDrawer}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:py-2.5",
-            active ? "font-medium text-foreground" : "text-sidebar-foreground",
-          )}
-        >
-          <Icon
+      <SortableItem key={d.id} id={d.id} disabled={!dndOn}>
+        {({ setNodeRef, listeners, style, isDragging }) => (
+          <div
+            ref={setNodeRef}
+            style={style}
+            {...(dndOn && !touchReorder ? listeners : {})}
             className={cn(
-              "size-3.75 shrink-0",
-              active ? "text-primary" : "text-muted-foreground",
+              "group flex items-center gap-1 rounded-md pr-1 transition-colors",
+              active ? "bg-primary/15" : "hover:bg-sidebar-accent",
+              dndOn && !touchReorder && "cursor-grab active:cursor-grabbing",
+              isDragging && "opacity-0",
             )}
-          />
-          <span className="min-w-0 flex-1 truncate">{docLabel(d)}</span>
-          {isPrivate && (
-            <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="Private" />
-          )}
-        </Link>
-        {docEditable && !isMobile && <ActionsMenu actions={menu} />}
-      </div>
+          >
+            <Link
+              to={docPath(p.slug, folderSlug, d.slug)}
+              onClick={onCloseDrawer}
+              tabIndex={touchReorder ? -1 : undefined}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm max-md:py-2.5",
+                active ? "font-medium text-foreground" : "text-sidebar-foreground",
+                touchReorder && "pointer-events-none",
+              )}
+            >
+              <Icon
+                className={cn(
+                  "size-3.75 shrink-0",
+                  active ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+              <span className="min-w-0 flex-1 truncate">{docLabel(d)}</span>
+              {isPrivate && (
+                <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="Private" />
+              )}
+            </Link>
+            {touchReorder ? (
+              <DragGrip listeners={listeners} className="size-7 shrink-0" />
+            ) : (
+              docEditable && !isMobile && <ActionsMenu actions={menu} />
+            )}
+          </div>
+        )}
+      </SortableItem>
     );
   };
 
@@ -243,47 +291,51 @@ export default function Sidebar({
       (d) => d.project_id === p.id && !d.folder_id && !d.is_quick_note,
     );
     const empty = projectFolders.length === 0 && rootDocs.length === 0;
-    return (
-      <>
-        {projectFolders.map((f) => {
-          const isCollapsed = collapsed.has(f.id);
-          const folderDocs = documents.filter((d) => d.folder_id === f.id);
-          const folderActive = activeFolder?.id === f.id;
-          // A locked folder hides its edit affordances for non-owners (DB enforces it regardless).
-          const folderEditable =
-            editable && canEditFolder(p, f, role, uid, myRole.get(p.id), folderGrantRole(grants, f.id, uid));
-          const menu: MenuAction[] = [
-            {
-              label: "New document",
-              icon: <FilePlus />,
-              onSelect: () => void onCreateDoc(p, f.id),
-            },
-            {
-              label: "Rename",
-              icon: <Pencil />,
-              onSelect: () => void actions.editFolder(f),
-            },
-            // Permissions live only on the Project settings page (see the doc menu above).
-            {
-              label: "Delete",
-              icon: <Trash2 />,
-              danger: true,
-              separatorBefore: true,
-              onSelect: () => void onDeleteFolder(p, f.id, f),
-            },
-          ];
-          return (
-            <div key={f.id}>
+    const dndOn = editable && (!isTouch || reorderActive);
+    const touchReorder = isTouch && reorderActive && editable;
+
+    // One folder row + its (nested, separately sortable) documents. Used as the folders list's renderItem.
+    const folderItem = (f: Folder) => {
+      const isCollapsed = collapsed.has(f.id);
+      const folderDocs = documents.filter((d) => d.folder_id === f.id);
+      const folderActive = activeFolder?.id === f.id;
+      // A locked folder hides its edit affordances for non-owners (DB enforces it regardless).
+      const folderEditable =
+        editable && canEditFolder(p, f, role, uid, myRole.get(p.id), folderGrantRole(grants, f.id, uid));
+      const menu: MenuAction[] = [
+        { label: "New document", icon: <FilePlus />, onSelect: () => void onCreateDoc(p, f.id) },
+        { label: "Rename", icon: <Pencil />, onSelect: () => void actions.editFolder(f) },
+        // Permissions live only on the Project settings page (see the doc menu above).
+        {
+          label: "Delete",
+          icon: <Trash2 />,
+          danger: true,
+          separatorBefore: true,
+          onSelect: () => void onDeleteFolder(p, f.id, f),
+        },
+      ];
+      return (
+        <SortableItem key={f.id} id={f.id} disabled={!dndOn}>
+          {({ setNodeRef, listeners, style, isDragging }) => (
+            <div ref={setNodeRef} style={style} className={cn(isDragging && "opacity-0")}>
               <div
+                // The drag handle is the folder HEADER only — dragging a child document grabs the doc
+                // (its own nested sortable list below), never the whole folder.
+                {...(dndOn && !touchReorder ? listeners : {})}
                 className={cn(
                   "group flex items-center gap-0.5 rounded-md pr-1 transition-colors",
                   folderActive ? "bg-primary/15" : "hover:bg-sidebar-accent",
+                  dndOn && !touchReorder && "cursor-grab active:cursor-grabbing",
                 )}
               >
                 <button
-                  className="ml-1 flex size-5 max-md:size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                  className={cn(
+                    "ml-1 flex size-5 max-md:size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground",
+                    touchReorder && "pointer-events-none opacity-40",
+                  )}
                   onClick={() => collapse(f.id, !isCollapsed)}
                   aria-label={isCollapsed ? "Expand" : "Collapse"}
+                  tabIndex={touchReorder ? -1 : undefined}
                 >
                   {isCollapsed ? (
                     <ChevronRight className="size-3.5" />
@@ -298,11 +350,11 @@ export default function Sidebar({
                     collapse(f.id, false);
                     onCloseDrawer();
                   }}
+                  tabIndex={touchReorder ? -1 : undefined}
                   className={cn(
                     "flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-1 text-sm max-md:py-2.5",
-                    folderActive
-                      ? "font-medium text-foreground"
-                      : "text-sidebar-foreground",
+                    folderActive ? "font-medium text-foreground" : "text-sidebar-foreground",
+                    touchReorder && "pointer-events-none",
                   )}
                 >
                   <FolderGlyph
@@ -316,22 +368,54 @@ export default function Sidebar({
                     <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="Private" />
                   )}
                 </Link>
-                {folderEditable && !isMobile && <ActionsMenu actions={menu} />}
+                {touchReorder ? (
+                  <DragGrip listeners={listeners} className="size-7 shrink-0" />
+                ) : (
+                  folderEditable && !isMobile && <ActionsMenu actions={menu} />
+                )}
               </div>
               {!isCollapsed && (
                 <div className="my-0.5 ml-4 border-l border-sidebar-border pl-1">
-                  {folderDocs.map((d) => docRow(d, p, editable, f))}
+                  <Reorderable
+                    items={folderDocs}
+                    strategy={verticalListSortingStrategy}
+                    enabled={dndOn}
+                    touch={isTouch}
+                    onReorder={(ordered) => void reorder("documents", ordered)}
+                    renderItem={(d) => docRow(d, p, editable, f)}
+                    renderOverlay={(d) => docOverlay(d)}
+                  />
                   {folderDocs.length === 0 && (
-                    <div className="px-2 py-1 pl-7 text-xs text-muted-foreground italic">
-                      empty
-                    </div>
+                    <div className="px-2 py-1 pl-7 text-xs text-muted-foreground italic">empty</div>
                   )}
                 </div>
               )}
             </div>
-          );
-        })}
-        {rootDocs.map((d) => docRow(d, p, editable, null))}
+          )}
+        </SortableItem>
+      );
+    };
+
+    return (
+      <>
+        <Reorderable
+          items={projectFolders}
+          strategy={verticalListSortingStrategy}
+          enabled={dndOn}
+          touch={isTouch}
+          onReorder={(ordered) => void reorder("folders", ordered)}
+          renderItem={folderItem}
+          renderOverlay={(f) => folderOverlay(f)}
+        />
+        <Reorderable
+          items={rootDocs}
+          strategy={verticalListSortingStrategy}
+          enabled={dndOn}
+          touch={isTouch}
+          onReorder={(ordered) => void reorder("documents", ordered)}
+          renderItem={(d) => docRow(d, p, editable, null)}
+          renderOverlay={(d) => docOverlay(d)}
+        />
         {empty && (
           <div className="px-3 py-2 text-center text-xs text-muted-foreground">
             No documents yet
