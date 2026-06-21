@@ -4,7 +4,7 @@ import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { StateEffect, StateField } from '@codemirror/state'
 import type { EditorState, Extension } from '@codemirror/state'
 import { captureSelection, rangeForSourceSpan, supportsHighlights } from '../lib/anchor'
-import { preprocessImageSizesMapped, rawToPreprocessed } from '../lib/mdImage'
+import { findImages, preprocessImageSizesMapped, rawToPreprocessed } from '../lib/mdImage'
 
 // Two-way "where am I" highlight between the source editor and the rendered preview (split mode,
 // markdown only). Select text in either pane → the matching text lights up in the other; with only a
@@ -138,8 +138,19 @@ export function usePeerHighlight({
     if (!enabledRef.current || !view || !root || !view.hasFocus) return
     const sel = view.state.selection.main
     if (sel.empty) {
-      const block = innermostBlockForLine(root, view.state.doc.lineAt(sel.head).number)
-      block?.setAttribute('data-peer-active', '')
+      const line = view.state.doc.lineAt(sel.head)
+      // Caret inside an image token → ring the matching rendered <img> (same document order
+      // `onResizeImage` uses). The cheap `![` check avoids scanning the whole doc on every caret move.
+      if (line.text.includes('![')) {
+        const imgs = findImages(contentRef.current)
+        const idx = imgs.findIndex((t) => sel.head >= t.from && sel.head <= t.to)
+        const el = idx >= 0 ? root.querySelectorAll('img')[idx] : null
+        if (el) {
+          el.setAttribute('data-peer-active', '')
+          return
+        }
+      }
+      innermostBlockForLine(root, line.number)?.setAttribute('data-peer-active', '')
       return
     }
     const { map } = preprocessImageSizesMapped(contentRef.current)

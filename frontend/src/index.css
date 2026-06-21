@@ -652,13 +652,19 @@
 .dark ::highlight(peer) {
   background-color: oklch(0.7 0.13 200 / 0.38);
 }
-.md [data-peer-active] {
-  background-color: oklch(0.72 0.13 200 / 0.1);
-  box-shadow: inset 3px 0 0 oklch(0.65 0.13 200 / 0.7);
+.md [data-peer-active]:not(img) {
+  background-color: oklch(0.72 0.13 200 / 0.14);
   border-radius: 0.2rem;
 }
-.dark .md [data-peer-active] {
-  background-color: oklch(0.7 0.13 200 / 0.14);
+.dark .md [data-peer-active]:not(img) {
+  background-color: oklch(0.7 0.13 200 / 0.18);
+}
+/* Image clicked in the source editor → ring the matching rendered image (a background tint would just
+   sit hidden behind it). */
+.md img[data-peer-active] {
+  outline: 2px solid oklch(0.6 0.13 200 / 0.9);
+  outline-offset: 2px;
+  border-radius: 0.2rem;
 }
 .cm-peer {
   background-color: oklch(0.72 0.13 200 / 0.32);
