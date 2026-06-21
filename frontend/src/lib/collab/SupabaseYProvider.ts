@@ -51,6 +51,13 @@ export class SupabaseYProvider {
   readonly whenSynced: Promise<void>
 
   private readonly docId: string
+  // Read-only observer (a viewer/commenter watching live edits): receives + applies updates, but never
+  // sends sync1/awareness/edits (a non-editor can't broadcast — RLS) and never seeds the canonical blob.
+  private readonly readOnly: boolean
+  // True once a canonical blob has been loaded from the DB. Observers only surface their text once this
+  // is set, so a join-before-seed race never flashes an empty/partial document (updates still apply and
+  // Yjs reconciles them against the blob when it arrives).
+  private hasState = false
   private channel: RealtimeChannel | null = null
   private subscribed = false
   private destroyed = false
@@ -63,8 +70,9 @@ export class SupabaseYProvider {
   private awarenessDirty = new Set<number>()
   private awarenessTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor(docId: string, user: CollabUser) {
+  constructor(docId: string, user: CollabUser, opts: { readOnly?: boolean } = {}) {
     this.docId = docId
+    this.readOnly = opts.readOnly ?? false
     this.ydoc = new Y.Doc()
     this.ytext = this.ydoc.getText(FIELD)
     this.awareness = new Awareness(this.ydoc)
@@ -77,8 +85,16 @@ export class SupabaseYProvider {
       colorLight: user.colorLight,
       uid: user.uid,
     })
-    this.ydoc.on('update', this.onLocalUpdate)
-    this.awareness.on('update', this.onAwarenessUpdate)
+    // Observers never emit — so don't even wire the local→wire listeners.
+    if (!this.readOnly) {
+      this.ydoc.on('update', this.onLocalUpdate)
+      this.awareness.on('update', this.onAwarenessUpdate)
+    }
+  }
+
+  /** Has a canonical document blob been loaded yet? Observers gate their rendered text on this. */
+  get ready(): boolean {
+    return this.hasState
   }
 
   /** Load the canonical Yjs state from the DB (or seed it once), then go live on the broadcast channel. */
@@ -86,7 +102,24 @@ export class SupabaseYProvider {
     await this.loadOrSeed(seedText)
     if (this.destroyed) return
     this.subscribe()
-    this.flushTimer = setInterval(this.flush, EDIT_FLUSH_MS)
+    if (!this.readOnly) this.flushTimer = setInterval(this.flush, EDIT_FLUSH_MS)
+  }
+
+  /** Re-read the canonical blob and merge it (Yjs reconciles). An observer polls this so it (a) picks
+   *  up the blob if it joined before the first editor seeded it, and (b) backfills any edits broadcast
+   *  in the gap between the leader's last persist and the observer subscribing. */
+  async reloadCanonical(): Promise<void> {
+    if (this.destroyed) return
+    const { data } = await supabase
+      .from('document_collab')
+      .select('ydoc')
+      .eq('document_id', this.docId)
+      .maybeSingle()
+    const blob = (data as { ydoc: string } | null)?.ydoc
+    if (blob) {
+      Y.applyUpdate(this.ydoc, pgHexToBytes(blob), this)
+      this.hasState = true
+    }
   }
 
   // ---- initial state: DB, not broadcast (no message cost, no 256 KB broadcast-size risk) ----
@@ -101,6 +134,14 @@ export class SupabaseYProvider {
     const blob = (data as { ydoc: string } | null)?.ydoc
     if (blob) {
       Y.applyUpdate(this.ydoc, pgHexToBytes(blob), this)
+      this.hasState = true
+      this.resolveSynced()
+      return
+    }
+
+    // Observers can't seed (RLS), and there's no canonical doc yet — stay empty (the caller renders the
+    // static fallback) until a blob appears via the observer's reloadCanonical poll.
+    if (this.readOnly) {
       this.resolveSynced()
       return
     }
@@ -146,11 +187,15 @@ export class SupabaseYProvider {
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           this.subscribed = true
-          // Ask peers for any edits made between our DB read and now (they answer with `update`), and
-          // announce our own cursor/identity straight away so others paint it without waiting.
-          this.send('sync1', bytesToBase64(Y.encodeStateVector(this.ydoc)))
-          this.send('awareness', bytesToBase64(encodeAwarenessUpdate(this.awareness, [this.awareness.clientID])))
-          this.flush() // anything buffered during the subscribe handshake
+          // Observers only listen — sending sync1/awareness/edits requires broadcast (editor RLS), so a
+          // viewer's sends would just be rejected. They rely on the canonical blob + received updates.
+          if (!this.readOnly) {
+            // Ask peers for any edits made between our DB read and now (they answer with `update`), and
+            // announce our own cursor/identity straight away so others paint it without waiting.
+            this.send('sync1', bytesToBase64(Y.encodeStateVector(this.ydoc)))
+            this.send('awareness', bytesToBase64(encodeAwarenessUpdate(this.awareness, [this.awareness.clientID])))
+            this.flush() // anything buffered during the subscribe handshake
+          }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // Most likely the realtime.messages broadcast RLS (migration 0026) isn't applied, or this user
           // lacks EDIT. Surface it rather than silently never syncing.
@@ -242,7 +287,8 @@ export class SupabaseYProvider {
     // Drop our caret and tell peers now, so they don't wait ~30s for the awareness timeout to expire it.
     removeAwarenessStates(this.awareness, [this.awareness.clientID], 'local')
     if (this.channel) {
-      if (this.subscribed) {
+      // Observers never published a caret (and can't broadcast anyway), so they have nothing to retract.
+      if (this.subscribed && !this.readOnly) {
         void this.channel.send({
           type: 'broadcast',
           event: 'awareness',

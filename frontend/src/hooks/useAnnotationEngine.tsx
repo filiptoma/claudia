@@ -129,6 +129,7 @@ export function useAnnotationEngine({
   canEdit,
   canComment,
   floatingTop,
+  liveObserved = false,
 }: {
   docRef: RefObject<HTMLDivElement | null>
   docId: string
@@ -137,6 +138,9 @@ export function useAnnotationEngine({
   canEdit: boolean
   canComment: boolean
   floatingTop: number
+  /** True when `content` is a remote co-editor's LIVE text (read-mode live view), not the local user's
+   *  own edits — suppresses orphan-reaping so watching someone else type never deletes annotations. */
+  liveObserved?: boolean
 }): AnnotationEngine {
   const { uid } = useAuth()
   const { focusMode, listMode } = useAnnotationLayout()
@@ -284,7 +288,9 @@ export function useAnnotationEngine({
   // (a commenter's in-progress suggestion edit must never delete the doc's real annotations).
   useEffect(() => {
     const timers = reapTimersRef.current
-    if (!canEdit) {
+    // Never reap while passively watching a co-editor's live text: those "orphans" are the OTHER
+    // person's in-progress edits, not the local user removing an anchor.
+    if (!canEdit || liveObserved) {
       for (const h of timers.values()) clearTimeout(h)
       timers.clear()
       return
@@ -312,7 +318,7 @@ export function useAnnotationEngine({
         }, ORPHAN_GRACE_MS),
       )
     }
-  }, [placements, unresolvedThreads, pendingSuggestions, canEdit, actions])
+  }, [placements, unresolvedThreads, pendingSuggestions, canEdit, liveObserved, actions])
 
   // Cancel any pending reaps when the engine unmounts (doc switch / mode change), so a deferred delete
   // never fires against a document the user has navigated away from.

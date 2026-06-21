@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { AnnotationContext } from '../../context/AnnotationContext'
 import { useAnnotationEngine } from '../../hooks/useAnnotationEngine'
+import { useObservedDocument } from '../../lib/collab/useObservedDocument'
 import DocView from '../DocView'
 import AnnotationToolbar from './AnnotationToolbar'
 import MarginIndicatorGroup from './MarginIndicator'
@@ -31,14 +32,20 @@ export default function AnnotationLayer({
   canComment?: boolean
 }) {
   const docRef = useRef<HTMLDivElement>(null)
+  // Live read-only view: while ≥2 people are present and an editor is co-editing, stream their edits in
+  // here (read mode is everyone's "watch" surface — viewers, commenters, and editors not currently
+  // typing). Falls back to the saved content when no session is live.
+  const liveText = useObservedDocument(docId, true, () => content)
+  const shownContent = liveText ?? content
   const eng = useAnnotationEngine({
     docRef,
     docId,
     projectId,
-    content,
+    content: shownContent,
     canEdit,
     canComment,
     floatingTop: VIEW_FLOATING_TOP,
+    liveObserved: liveText !== null,
   })
 
   // The comments/suggestions button only makes sense when the user can comment or there's something
@@ -72,7 +79,7 @@ export default function AnnotationLayer({
           >
             <div className="relative overflow-visible">
               <div ref={docRef} onClick={eng.onDocClick}>
-                <DocView content={content} annotate suggestions={eng.suggestionDiffs} />
+                <DocView content={shownContent} annotate suggestions={eng.suggestionDiffs} />
               </div>
 
               {eng.listMode === 'sidebar' &&
