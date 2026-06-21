@@ -476,6 +476,14 @@ export async function deleteComment(commentId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+// Delete a comment/suggestion whose anchored text was removed from the document. Goes through a
+// SECURITY DEFINER RPC gated by can_edit_document (the per-table delete RLS is too narrow to let an
+// editor remove someone else's unresolved/pending annotation). Idempotent: a no-op if already gone.
+export async function reapOrphanedAnnotation(kind: 'comment' | 'suggestion', id: string): Promise<void> {
+  const { error } = await supabase.rpc('reap_orphaned_annotation', { p_kind: kind, p_id: id })
+  if (error) throw new Error(error.message)
+}
+
 // ---- annotations: suggested edits ----
 
 export async function listDocumentSuggestions(documentId: string): Promise<SuggestionThread[]> {

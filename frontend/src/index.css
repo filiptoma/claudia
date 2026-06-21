@@ -641,6 +641,34 @@
   background-color: oklch(0.62 0.16 264 / 0.5);
 }
 
+/* Split-mode peer highlight (usePeerHighlight): mirror the focused pane's selection / active block in
+   the OTHER pane so it's easy to see where the text you're editing lives. A cool teal — distinct from
+   the warm comment tint and the indigo suggestion tint so the three never read as the same thing.
+   Precise selections paint as a text run (preview `::highlight(peer)` / editor `.cm-peer`); a bare
+   caret/click highlights the enclosing block (`[data-peer-active]` / `.cm-peer-line`) with a left bar. */
+::highlight(peer) {
+  background-color: oklch(0.72 0.13 200 / 0.32);
+}
+.dark ::highlight(peer) {
+  background-color: oklch(0.7 0.13 200 / 0.38);
+}
+.md [data-peer-active] {
+  background-color: oklch(0.72 0.13 200 / 0.1);
+  box-shadow: inset 3px 0 0 oklch(0.65 0.13 200 / 0.7);
+  border-radius: 0.2rem;
+}
+.dark .md [data-peer-active] {
+  background-color: oklch(0.7 0.13 200 / 0.14);
+}
+.cm-peer {
+  background-color: oklch(0.72 0.13 200 / 0.32);
+  border-radius: 0.15rem;
+}
+.cm-line.cm-peer-line {
+  background-color: oklch(0.72 0.13 200 / 0.12);
+  box-shadow: inset 3px 0 0 oklch(0.65 0.13 200 / 0.7);
+}
+
 /* Inline suggested-edit diff (rendered by rehypeSuggestionDiff) — Google-Docs style: the original and
    the suggestion interleaved, deletions struck through, an indigo border around the change, NO colour
    and no background (colour is reserved for the red/green diff in the cards). */

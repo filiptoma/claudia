@@ -40,6 +40,19 @@ export interface MarginGroup {
   items: Array<{ key: string; kind: MarginKind; active: boolean; resolved?: boolean }>
 }
 
+// A detached Range (its text nodes were replaced by a re-render) reports an all-zero rect; treat that
+// as "no usable range" so scrollToKey falls back to a fresh anchor re-resolve.
+function isEmptyRect(r: DOMRect): boolean {
+  return r.width === 0 && r.height === 0 && r.top === 0 && r.left === 0
+}
+
+// How long an annotation must stay orphaned (its anchored text absent from the render) before it is
+// deleted. Generous on purpose: an accidental removal followed by a Ctrl-Z — even after pausing to
+// notice it — must re-resolve the anchor and cancel the pending delete within this window. Erring long
+// is cheap (the highlight is already gone instantly; only the sidebar row lingers a little longer, and
+// anything not reaped this session is cleaned up on the next load), so we give undo plenty of room.
+const ORPHAN_GRACE_MS = 15000
+
 function getScrollParent(el: HTMLElement): HTMLElement | null {
   let node = el.parentElement
   while (node) {
@@ -133,6 +146,8 @@ export function useAnnotationEngine({
 
   const rangesRef = useRef(new Map<string, Range>())
   const boundsRef = useRef<Bound[]>([])
+  // Pending "reap this orphaned annotation" timers, keyed by annotation id (see the reaper effect).
+  const reapTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -260,6 +275,55 @@ export function useAnnotationEngine({
 
   useEffect(() => () => clearHighlights(), [])
 
+  // ---- reap orphaned annotations (their anchored text was removed) with an undo grace period ----
+  // An active comment/suggestion whose anchor can no longer be found in the render (placement === null)
+  // has lost its referent, so it should cease to exist. But a delete must survive an *accidental*
+  // removal + Ctrl-Z: we only delete after the annotation has been orphaned *continuously* for the grace
+  // window, and any re-resolution in between (undo, re-type) cancels the pending delete. Only editors
+  // reap — they're the ones whose edits orphan an anchor, and the RPC is gated on can_edit_document
+  // (a commenter's in-progress suggestion edit must never delete the doc's real annotations).
+  useEffect(() => {
+    const timers = reapTimersRef.current
+    if (!canEdit) {
+      for (const h of timers.values()) clearTimeout(h)
+      timers.clear()
+      return
+    }
+    const orphans: Array<{ key: string; kind: 'comment' | 'suggestion' }> = []
+    for (const t of unresolvedThreads) if (placements[t.id] === null) orphans.push({ key: t.id, kind: 'comment' })
+    for (const s of pendingSuggestions) if (placements[s.id] === null) orphans.push({ key: s.id, kind: 'suggestion' })
+    const orphanKeys = new Set(orphans.map((o) => o.key))
+
+    // Cancel timers whose anchor came back (undo/re-type) or whose annotation is already gone.
+    for (const [key, h] of timers) {
+      if (!orphanKeys.has(key)) {
+        clearTimeout(h)
+        timers.delete(key)
+      }
+    }
+    // Arm a grace timer for each newly-orphaned annotation.
+    for (const { key, kind } of orphans) {
+      if (timers.has(key)) continue
+      timers.set(
+        key,
+        setTimeout(() => {
+          timers.delete(key)
+          void actions.reapOrphan(kind, key).catch(() => {})
+        }, ORPHAN_GRACE_MS),
+      )
+    }
+  }, [placements, unresolvedThreads, pendingSuggestions, canEdit, actions])
+
+  // Cancel any pending reaps when the engine unmounts (doc switch / mode change), so a deferred delete
+  // never fires against a document the user has navigated away from.
+  useEffect(() => {
+    const timers = reapTimersRef.current
+    return () => {
+      for (const h of timers.values()) clearTimeout(h)
+      timers.clear()
+    }
+  }, [])
+
   // ---- selection listener → toolbar ----
   useEffect(() => {
     if (!uid || !canComment) return
@@ -301,12 +365,30 @@ export function useAnnotationEngine({
     }
   }, [docRef, uid, canComment, draft, content])
 
+  // Anchor for every comment/suggestion (resolved or not) by key, so scrollToKey can re-resolve a
+  // fresh range at click time. The layout effect only stores ranges for unresolved/pending items, and
+  // a stored range can also go stale (its text nodes replaced) across a re-render — both left clicking
+  // a sidebar card scrolling nowhere. Re-resolving from the anchor on demand fixes both.
+  const anchorsByKey = useMemo(() => {
+    const m = new Map<string, Capture['anchor']>()
+    for (const t of threads) m.set(t.id, t.anchor)
+    for (const s of suggestions) m.set(s.id, s.anchor)
+    return m
+  }, [threads, suggestions])
+
   // `bottomInset` reserves space at the bottom of the scroller (the mobile focus sheet covers it), so
   // an item hidden behind the sheet counts as out-of-view and gets scrolled up clear of it.
   const scrollToKey = useCallback((key: string, bottomInset = 0) => {
-    const range = rangesRef.current.get(key)
     const root = docRef.current
-    if (!range || !root) return
+    if (!root) return
+    // Prefer the painted range, but re-resolve from the anchor when it's missing (resolved items, not
+    // tracked in rangesRef) or detached (a zero-size rect after a re-render replaced its text nodes).
+    let range = rangesRef.current.get(key)
+    if (!range || isEmptyRect(range.getBoundingClientRect())) {
+      const anchor = anchorsByKey.get(key)
+      range = (anchor && resolveAnchor(root, anchor)) || undefined
+    }
+    if (!range) return
     const scroller = getScrollParent(root)
     if (!scroller) return
     const r = range.getBoundingClientRect()
@@ -314,7 +396,7 @@ export function useAnnotationEngine({
     if (r.top < sr.top + 64 || r.bottom > sr.bottom - bottomInset - 64) {
       scroller.scrollTo({ top: scroller.scrollTop + (r.top - sr.top) - 140, behavior: 'smooth' })
     }
-  }, [docRef])
+  }, [docRef, anchorsByKey])
 
   // Activating selects an annotation (highlight emphasis + sidebar selection / floating window) and
   // scrolls its anchor into view. It does NOT touch the sidebar: when the sidebar is open the
@@ -360,7 +442,8 @@ export function useAnnotationEngine({
     (kind: 'comment' | 'suggestion', capture: Capture, range: Range, top: number) => {
       setDraft({ kind, capture, range, top })
       setActiveKey(DRAFT_KEY)
-      setSidebarOpen(false)
+      // Don't close the sidebar: starting a comment/suggestion from a text selection while the rail is
+      // open should keep it open (the draft composer shows in the floating panel — see overlays).
       setSelection(null)
       window.getSelection()?.removeAllRanges()
     },
@@ -540,8 +623,11 @@ export function useAnnotationEngine({
           onSuggest={onSelectionSuggest}
         />
       )}
-      {focusMode === 'popover' && !sidebarOpen && <AnnotationFloatingPanel />}
-      {focusMode === 'sheet' && activeKey && !sidebarOpen && (
+      {/* The floating panel shows the active annotation when the sidebar is closed, but ALSO whenever a
+          draft is in progress — so starting a new comment/suggestion keeps the open sidebar open and
+          composes in the popover anchored at the selection. */}
+      {focusMode === 'popover' && (!sidebarOpen || !!draft) && <AnnotationFloatingPanel />}
+      {focusMode === 'sheet' && activeKey && (!sidebarOpen || !!draft) && (
         <AnnotationFocusSheet onHeightChange={setFocusSheetHeight} />
       )}
       <AnnotationSidebar />

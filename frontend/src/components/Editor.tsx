@@ -11,6 +11,7 @@ import {
 import { ChevronDown, ChevronUp, PencilLine, X } from "lucide-react";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useMarkdownScrollSync } from "../hooks/useMarkdownScrollSync";
+import { usePeerHighlight } from "../hooks/usePeerHighlight";
 import type { ChangeEvent, RefObject } from "react";
 import { AnnotationContext } from "../context/AnnotationContext";
 import { useAnnotationEngine } from "../hooks/useAnnotationEngine";
@@ -275,6 +276,13 @@ export default function Editor({
     }
   }, []);
   useMarkdownScrollSync(showPreview, cmView, previewEl);
+  // Two-way "where am I" highlight: editor selection ↔ preview, and vice-versa (split mode only).
+  const peer = usePeerHighlight({
+    enabled: showPreview,
+    cmView,
+    previewEl,
+    content: deferredPreview,
+  });
 
   // Slash flow state. Stage 1 (`slash`) is the in-document command menu — a passive overlay; focus
   // stays in CodeMirror, the typed `/query` lives in the document, and the editor keymap drives it.
@@ -777,8 +785,11 @@ export default function Editor({
       // Non-null only while a session is active; the editor remounts on that transition (see the key on
       // SourceEditor), so this is built into a fresh editor state rather than hot-swapped mid-session.
       ...(collab.extension ? [collab.extension] : []),
+      // Two-way peer highlight (split mode): decoration field + selection listener. Stable identity, so
+      // including it here never rebuilds the editor.
+      peer.extension,
     ],
-    [uploadAndInsert, syncSlash, collab.extension],
+    [uploadAndInsert, syncSlash, collab.extension, peer.extension],
   );
 
   // Toolbar "@" button: insert a `/` at the caret and open the reference menu explicitly.

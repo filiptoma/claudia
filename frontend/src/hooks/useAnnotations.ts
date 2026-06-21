@@ -20,6 +20,7 @@ import {
   listDocumentSuggestionComments,
   listDocumentSuggestions,
   listMentionableUsers,
+  reapOrphanedAnnotation,
   rejectSuggestion,
   setThreadResolved,
   withdrawSuggestion,
@@ -267,6 +268,12 @@ export function useAnnotationActions(documentId: string) {
     async deleteSuggestionMessage(commentId: string): Promise<void> {
       await deleteSuggestionComment(commentId)
       await refreshSuggestions()
+    },
+    // Delete an annotation whose anchored text was removed from the document (the annotation engine
+    // calls this after a grace period so an accidental removal + undo doesn't lose it). Idempotent.
+    async reapOrphan(kind: 'comment' | 'suggestion', id: string): Promise<void> {
+      await reapOrphanedAnnotation(kind, id)
+      await (kind === 'comment' ? refreshComments() : refreshSuggestions())
     },
   }
 }

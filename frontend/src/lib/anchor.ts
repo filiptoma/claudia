@@ -101,6 +101,54 @@ export function captureSelection(root: HTMLElement, range: Range, content: strin
   return { sourceStart, sourceEnd, anchor: { quote, prefix, suffix } }
 }
 
+// ---- source range → rendered DOM Range (inverse of captureSelection's source mapping) ----
+
+// Flat (rendered) position for a preprocessed source offset. Snaps to a run boundary when the offset
+// falls in a gap (code/math/whitespace not wrapped in `.sp`) or when an escape/entity makes the
+// rendered run a different length than its source slice (so we never guess an intra-run offset).
+function flatFromSource(pp: number, recs: SpanRec[], side: 'start' | 'end'): number | null {
+  for (const r of recs) {
+    if (pp >= r.s && pp <= r.e) {
+      if (r.flatEnd - r.flatStart !== r.e - r.s) return side === 'start' ? r.flatStart : r.flatEnd
+      return r.flatStart + (pp - r.s)
+    }
+  }
+  // Outside every run: snap to the nearest run boundary on the correct side.
+  let before: SpanRec | null = null
+  let after: SpanRec | null = null
+  for (const r of recs) {
+    if (r.e <= pp) before = r
+    if (r.s >= pp && !after) after = r
+  }
+  if (side === 'start') return after?.flatStart ?? before?.flatEnd ?? null
+  return before?.flatEnd ?? after?.flatStart ?? null
+}
+
+/**
+ * Build a DOM Range over the rendered `.sp` text for a preprocessed source range [ppStart, ppEnd).
+ * The inverse of the source mapping in `captureSelection` — used to mirror the source editor's
+ * selection into the rendered preview (split mode). Returns null when it can't be located.
+ */
+export function rangeForSourceSpan(root: HTMLElement, ppStart: number, ppEnd: number): Range | null {
+  if (ppEnd <= ppStart) return null
+  const recs = buildSpanIndex(root)
+  if (recs.length === 0) return null
+  const flatStart = flatFromSource(ppStart, recs, 'start')
+  const flatEnd = flatFromSource(ppEnd, recs, 'end')
+  if (flatStart === null || flatEnd === null || flatEnd <= flatStart) return null
+  const a = locate(root, flatStart)
+  const b = locate(root, flatEnd)
+  if (!a || !b) return null
+  const range = document.createRange()
+  try {
+    range.setStart(a.node, a.offset)
+    range.setEnd(b.node, b.offset)
+  } catch {
+    return null
+  }
+  return range
+}
+
 // ---- re-anchoring (rendered) ----
 
 function commonSuffixLen(a: string, b: string): number {

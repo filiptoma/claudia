@@ -231,12 +231,24 @@ function renderBlock(node: MdNode, ctx: Ctx): string {
 
 // --- lists ----------------------------------------------------------------------------------------
 
+// Join an item's child blocks the way the `.md` preview's margins do: a block that follows a NESTED
+// LIST hugs it (the preview gives `li > ul/ol` margin: 0), while blocks after a paragraph get the
+// normal inter-block gap. This keeps a loose-list continuation paragraph grouped with its own item
+// instead of drifting halfway to the next one — the prior plain `\n\n` join spaced it like a
+// top-level block (par.spacing), so it read as detached / belonging to the following item.
 function renderListItemBody(item: MdNode, ctx: Ctx): string {
   if (!('children' in item) || !Array.isArray(item.children)) return ''
-  const parts = (item.children as MdNode[]).map((child) =>
-    child.type === 'paragraph' ? renderInlines(child.children as MdNode[], ctx) : renderBlock(child, ctx),
-  )
-  return parts.filter((s) => s.length > 0).join('\n\n')
+  let body = ''
+  let prevWasList = false
+  for (const child of item.children as MdNode[]) {
+    const piece =
+      child.type === 'paragraph' ? renderInlines(child.children as MdNode[], ctx) : renderBlock(child, ctx)
+    if (piece.length === 0) continue
+    if (body.length > 0) body += prevWasList ? '\n#v(0.55em, weak: true)\n' : '\n\n'
+    body += piece
+    prevWasList = child.type === 'list'
+  }
+  return body
 }
 
 function renderList(node: List, ctx: Ctx): string {
@@ -254,7 +266,11 @@ function renderList(node: List, ctx: Ctx): string {
   const fn = node.ordered ? 'enum' : 'list'
   const items_ = items.map((li) => `[${renderListItemBody(li as MdNode, ctx)}]`)
   const start = node.ordered && typeof node.start === 'number' && node.start !== 1 ? `start: ${node.start}, ` : ''
-  return `#${fn}(${start}${items_.join(', ')})`
+  // Loose (spread) lists separate items by the inter-block gap, mirroring the preview where loose
+  // items carry a paragraph bottom-margin; tight lists fall through to Typst's default line-pitch
+  // spacing (= par.leading), matching the preview's `.md li { margin: 0 }`.
+  const spacing = node.spread ? 'spacing: 2.2em, ' : ''
+  return `#${fn}(${spacing}${start}${items_.join(', ')})`
 }
 
 // --- tables ---------------------------------------------------------------------------------------

@@ -46,27 +46,33 @@ export function buildTypstDocument(body: string, opts: { title?: string } = {}):
 // 2.2rem top / per-level bottom margins (index.css:272-303). Smaller levels need a *larger* above
 // because their shorter ascenders contribute less of the visible gap than a big H1's do, so a flat
 // value would leave them looking cramped; the bottoms all clamp to the 2.2em block spacing anyway.
+// sticky: true keeps a heading on the same page as the content that follows it (Typst sets this on
+// the default heading block, but our custom show rules replace it, so we re-assert it) — no orphaned
+// heading at the foot of a page.
 #show heading: set text(fill: rgb("${c.foreground}"))
-#show heading.where(level: 1): it => block(above: 2.2em, below: 2.2em, text(size: 25pt, weight: 800, it.body))
-#show heading.where(level: 2): it => block(width: 100%, above: 2.55em, below: 2.2em, stroke: (bottom: 0.6pt + rgb("${c.border}")), inset: (bottom: 0.32em), text(size: 18.5pt, weight: 750, it.body))
-#show heading.where(level: 3): it => block(above: 3em, below: 2.2em, text(size: 14.5pt, weight: 750, it.body))
-#show heading.where(level: 4): it => block(above: 3em, below: 2.2em, text(size: 12.5pt, weight: 750, it.body))
-#show heading.where(level: 5): it => block(above: 3em, below: 2.2em, text(size: 11.5pt, weight: 700, fill: rgb("${c.muted}"), it.body))
-#show heading.where(level: 6): it => block(above: 3em, below: 2.2em, text(size: 11.5pt, weight: 700, fill: rgb("${c.muted}"), it.body))
+#show heading.where(level: 1): it => block(above: 2.2em, below: 2.2em, sticky: true, text(size: 25pt, weight: 800, it.body))
+#show heading.where(level: 2): it => block(width: 100%, above: 2.55em, below: 2.2em, sticky: true, stroke: (bottom: 0.6pt + rgb("${c.border}")), inset: (bottom: 0.32em), text(size: 18.5pt, weight: 750, it.body))
+#show heading.where(level: 3): it => block(above: 3em, below: 2.2em, sticky: true, text(size: 14.5pt, weight: 750, it.body))
+#show heading.where(level: 4): it => block(above: 3em, below: 2.2em, sticky: true, text(size: 12.5pt, weight: 750, it.body))
+#show heading.where(level: 5): it => block(above: 3em, below: 2.2em, sticky: true, text(size: 11.5pt, weight: 700, fill: rgb("${c.muted}"), it.body))
+#show heading.where(level: 6): it => block(above: 3em, below: 2.2em, sticky: true, text(size: 11.5pt, weight: 700, fill: rgb("${c.muted}"), it.body))
 
 // Code — JetBrains Mono; inline on a warm chip, blocks on a bordered surface (auto-highlighted).
 #show raw: set text(font: ("JetBrains Mono",))
 #show raw.where(block: false): it => box(fill: rgb("${c.codeChip}"), inset: (x: 0.35em), outset: (y: 0.28em), radius: 3pt, text(fill: rgb("${c.code}"), size: 0.86em, it))
 #show raw.where(block: true): it => block(width: 100%, above: 2.2em, below: 2.2em, fill: rgb("${c.surface}"), stroke: 0.6pt + rgb("${c.border}"), inset: (x: 1em, y: 0.85em), radius: 5pt, text(size: 9.7pt, it))
 
-// Lists — item spacing matches the body line pitch (tight .md lists have no per-item margin).
-#set list(marker: ([•], [◦], [▪]), spacing: 1em)
-#set enum(spacing: 1em)
+// Lists — markers mirror the .md preview ramp. Per-list item spacing is decided in mdToTypst: tight
+// lists fall through to the default (line-pitch = par.leading, like .md's marginless items), loose
+// (spread) lists pass an explicit block gap so items read as separated, as in the preview.
+#set list(marker: ([•], [◦], [▪]))
 
 // --- helpers used by the generated body ---
 #let mdhr = block(above: 2.2em, below: 2.2em, line(length: 100%, stroke: 0.6pt + rgb("${c.border}")))
 #let blockquote(body) = block(width: 100%, above: 2.2em, below: 2.2em, fill: rgb("${c.quote}"), inset: (x: 1em, y: 0.65em), radius: (top-right: 5pt, bottom-right: 5pt), stroke: (left: 2.5pt + rgb("${c.primary}")), body)
-#let mdimage(path, width: auto) = block(above: 2.2em, below: 2.2em, align(center, block(fill: white, stroke: 0.6pt + rgb("${c.plateBorder}"), inset: 8pt, radius: 5pt, image(path, width: width))))
+// breakable: false keeps an image plate whole — it never splits across a page boundary (an image is
+// never taller than a page here, so this can't cause an overflow).
+#let mdimage(path, width: auto) = block(above: 2.2em, below: 2.2em, breakable: false, align(center, block(fill: white, stroke: 0.6pt + rgb("${c.plateBorder}"), inset: 8pt, radius: 5pt, image(path, width: width))))
 #let taskmark(checked) = box(baseline: 0.12em, height: 0.82em, width: 0.82em, radius: 2pt, stroke: 0.08em + rgb("#9a7b1c"), fill: if checked { rgb("${c.primary}") } else { white })
 #let mdtable(cols: 1, aligns: (), header: (), rows: ()) = block(above: 1.25em, below: 1.25em, table(
   columns: cols,
